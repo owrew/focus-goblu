@@ -21,7 +21,7 @@ try {
     if (git status --porcelain) { throw 'Commit or review outstanding files before publishing.' }
     git fsck --full
     Require-Success 'History verification'
-    $suspicious = git log --all --format='%h' -G 'github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|BEGIN .*PRIVATE KEY'
+    $suspicious = git log --all --format='%h' -G 'github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
     Require-Success 'Credential pattern scan'
     if ($suspicious) { throw 'Potential credential material found in commit history.' }
     $excluded = git rev-list --objects --all | Select-String ' (work/|dist/|build/|installer/|\.venv/)|\.(onnx|weights|pt|exe|sqlite3)$'
