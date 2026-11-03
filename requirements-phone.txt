@@ -1,0 +1,5 @@
+# Optional and heavier: installs PyTorch. Review upstream AGPL/enterprise terms.
+ultralytics>=8.3,<9
+# Keep MediaPipe's NumPy ABI and a single OpenCV distribution.
+numpy==1.26.4
+opencv-python==4.11.0.86
