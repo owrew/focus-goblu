@@ -8,17 +8,19 @@ import wave
 import struct
 from collections import deque
 from dataclasses import asdict
-from PySide6.QtCore import Qt, QTimer, QRectF, QPointF, QUrl
-from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QFont, QPixmap, QKeySequence, QShortcut
+from PySide6.QtCore import Qt, QTimer, QRectF, QPointF, QUrl, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QFont, QPixmap, QKeySequence, QShortcut, QIcon, QLinearGradient
 from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QTabWidget, QScrollArea, QFormLayout,
     QSpinBox, QDoubleSpinBox, QComboBox, QCheckBox, QLineEdit, QFileDialog, QColorDialog,
-    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView)
+    QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QProgressBar, QGraphicsOpacityEffect, QAbstractItemView)
 from .engine import Settings, AttentionEngine, Observation, Decision
 from .storage import Store, data_dir
 from .mascot import Mascot, LINES
 from .vision import VisionWorker
+from .visuals import AuroraBackground, GlassPanel, CameraPreview, ASSETS
+from .effects import ScreenFire
 
 
 def duration(seconds):
@@ -33,6 +35,12 @@ class Chart(QWidget):
         self.bars = bars
         self.accent = "#40dfcf"
         self.setMinimumHeight(180)
+        self.setMouseTracking(True)
+
+    def mouseMoveEvent(self,event):
+        if self.values and not self.bars:
+            index = round(max(0,min(1,(event.position().x()-35)/max(1,self.width()-53)))*(len(self.values)-1))
+            self.setToolTip(f'Estimated attention: {self.values[index]*100:.0f}% · {len(self.values)-1-index} samples ago')
 
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -59,22 +67,39 @@ class Chart(QWidget):
             for i,v in enumerate(self.values):
                 point = QPointF(r.left()+i*r.width()/max(1,len(self.values)-1),r.bottom()-v*r.height())
                 path.moveTo(point) if i == 0 else path.lineTo(point)
-            p.setPen(QPen(QColor(self.accent),3)); p.drawPath(path)
+            area = QPainterPath(path); area.lineTo(r.right(),r.bottom()); area.lineTo(r.left(),r.bottom()); area.closeSubpath()
+            shade = QLinearGradient(0,r.top(),0,r.bottom())
+            c = QColor(self.accent); c.setAlpha(65); shade.setColorAt(0,c); c.setAlpha(0); shade.setColorAt(1,c)
+            p.fillPath(area,shade)
+            p.setPen(QPen(QColor(self.accent),3,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin)); p.drawPath(path)
             p.setPen(QColor("#8390ac")); p.drawText(r.left(),r.bottom()+20,"Recent estimated attention · up to 5 minutes")
         p.end()
 
 
 class Ring(QWidget):
     def __init__(self):
-        super().__init__(); self.value = 0; self.accent = "#40dfcf"; self.setFixedSize(155,155)
+        super().__init__(); self._value = self.display_value = 0.; self.accent = "#40dfcf"; self.setFixedSize(155,155)
+        self.motion = QTimer(self); self.motion.timeout.connect(self.ease); self.motion.start(33)
+
+    @property
+    def value(self): return self._value
+
+    @value.setter
+    def value(self,value):
+        self._value = max(0.,min(1.,value))
+        if getattr(self,'reduced',False): self.display_value = self._value
+
+    def ease(self):
+        if abs(self.display_value-self._value) > .001:
+            self.display_value += (self._value-self.display_value)*.18; self.update()
 
     def paintEvent(self,e):
         p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
         p.setPen(QPen(QColor("#2b3450"),10)); p.drawEllipse(QRectF(12,12,130,130))
         p.setPen(QPen(QColor(self.accent),10,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap))
-        p.drawArc(QRectF(12,12,130,130),90*16,-int(self.value*360*16))
+        p.drawArc(QRectF(12,12,130,130),90*16,-int(self.display_value*360*16))
         p.setPen(QColor("#f2f5ff")); p.setFont(QFont("Segoe UI",25,QFont.Weight.Bold))
-        p.drawText(self.rect(),Qt.AlignmentFlag.AlignCenter,f"{self.value*100:.0f}%")
+        p.drawText(self.rect(),Qt.AlignmentFlag.AlignCenter,f"{self.display_value*100:.0f}%")
 
 
 class MainWindow(QMainWindow):
@@ -94,9 +119,12 @@ class MainWindow(QMainWindow):
         self.samples = deque(maxlen=300)
         self.calibration = None
         self.observation = Observation(valid=False)
+        self.preview_until = 0.
+        self.screen_fire = ScreenFire()
         self.overlay = Mascot(True)
         self.overlay.action.connect(self.pet_action)
         self.setWindowTitle("Focus Goblin · local focus companion")
+        self.setWindowIcon(QIcon(str(ASSETS/'goblin-logo.png')))
         self.resize(1280,880)
         self.setMinimumSize(980,720)
         self.build()
@@ -113,20 +141,25 @@ class MainWindow(QMainWindow):
         return b
 
     def panel(self, title):
-        f = QFrame(); f.setObjectName("panel")
+        f = GlassPanel(); f.setObjectName("panel")
         layout = QVBoxLayout(f)
-        heading = QLabel(title); heading.setObjectName("sectionTitle"); layout.addWidget(heading)
+        layout.setContentsMargins(18,16,18,16)
+        heading = QLabel(title); heading.setObjectName("sectionTitle"); heading.setFixedHeight(22); layout.addWidget(heading)
         return f,layout
 
     def build(self):
-        root = QWidget(); self.setCentralWidget(root)
+        root = AuroraBackground(); self.setCentralWidget(root)
         layout = QVBoxLayout(root); layout.setContentsMargins(26,20,26,18); layout.setSpacing(14)
         top = QHBoxLayout()
+        logo = QLabel(); logo.setFixedSize(68,58)
+        logo.setPixmap(QPixmap(str(ASSETS/'goblin-logo.png')).scaled(68,58,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation))
+        top.addWidget(logo)
         brand = QLabel("Focus Goblin"); brand.setObjectName("brand")
         top.addWidget(brand); top.addStretch()
+        local = QLabel("Local companion  /  v0.2"); local.setObjectName('muted'); top.addWidget(local)
         self.camera_status = QLabel("● Camera off · local processing")
         top.addWidget(self.camera_status); layout.addLayout(top)
-        sub = QLabel("A little chaos. A little accountability. A place to return to your work.")
+        sub = QLabel("Your focus has a guardian. Give it something worth guarding.")
         sub.setObjectName("muted"); layout.addWidget(sub)
         controls = QHBoxLayout()
         self.start_button = self.button("Start camera",self.start_camera,True)
@@ -139,7 +172,7 @@ class MainWindow(QMainWindow):
         self.notice = QLabel("Ready. Start the camera, then calibrate while looking naturally at your screen.")
         self.notice.setWordWrap(True); self.notice.setObjectName("notice"); layout.addWidget(self.notice)
         self.tabs = QTabWidget(); layout.addWidget(self.tabs,1)
-        page = QWidget(); page.setMinimumHeight(740)
+        page = QWidget(); page.setMinimumHeight(850)
         observatory = QScrollArea(); observatory.setWidgetResizable(True); observatory.setWidget(page)
         self.tabs.addTab(observatory,"Observatory")
         grid = QGridLayout(page); grid.setSpacing(14)
@@ -151,11 +184,13 @@ class MainWindow(QMainWindow):
             inner.addWidget(value); self.metrics[key] = value; row.addWidget(card)
         grid.addLayout(row,0,0,1,2)
         live,inner = self.panel("Local camera / attention signals")
-        self.preview = QLabel("Camera off\nNo images are recorded.")
+        self.preview = CameraPreview("Camera off\nStart a session to see your local preview.")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter); self.preview.setMinimumSize(400,210)
         self.preview.setObjectName("preview"); inner.addWidget(self.preview,1)
         self.signals = QLabel("Head and iris estimates appear after calibration."); self.signals.setWordWrap(True)
         inner.addWidget(self.signals); grid.addWidget(live,1,0)
+        self.signal_badges = QLabel('Face —     Phone —     Camera off')
+        self.signal_badges.setObjectName('signalBadges'); inner.addWidget(self.signal_badges)
         creature,inner = self.panel("The cave")
         line = QHBoxLayout()
         self.mascot = Mascot(); self.mascot.setMinimumSize(260,240); line.addWidget(self.mascot,1)
@@ -167,19 +202,29 @@ class MainWindow(QMainWindow):
         actions.addWidget(self.button("Show cave",self.show_overlay))
         actions.addWidget(self.button("Take a break",self.take_break))
         inner.addLayout(actions); grid.addWidget(creature,1,1)
+        mission,mission_inner = self.panel('Session rhythm')
+        rhythm = QHBoxLayout()
+        self.goal_label = QLabel('Daily goal · 0 / 60 min'); rhythm.addWidget(self.goal_label)
+        self.goal_progress = QProgressBar(); self.goal_progress.setRange(0,100); self.goal_progress.setTextVisible(False); rhythm.addWidget(self.goal_progress,2)
+        self.break_label = QLabel('Next stretch · 30 min'); rhythm.addWidget(self.break_label)
+        self.break_progress = QProgressBar(); self.break_progress.setRange(0,100); self.break_progress.setTextVisible(False); rhythm.addWidget(self.break_progress,1)
+        mission_inner.addLayout(rhythm); grid.addWidget(mission,2,0,1,2)
         chart,inner = self.panel("Attention signal")
-        self.chart = Chart(); inner.addWidget(self.chart); grid.addWidget(chart,2,0)
+        self.chart = Chart(); inner.addWidget(self.chart); grid.addWidget(chart,3,0)
         week,inner = self.panel("Daily focus · real sessions only")
-        self.week = Chart(True); inner.addWidget(self.week); grid.addWidget(week,2,1)
+        self.week = Chart(True); inner.addWidget(self.week); grid.addWidget(week,3,1)
         self.footer = QLabel("Break timer 00:00 · Face absence and uncalibrated time are excluded from focus.")
-        self.footer.setWordWrap(True); grid.addWidget(self.footer,3,0,1,2)
+        self.footer.setWordWrap(True); grid.addWidget(self.footer,4,0,1,2)
         grid.setColumnStretch(0,1); grid.setColumnStretch(1,1)
-        grid.setRowStretch(1,2); grid.setRowStretch(2,1)
+        grid.setRowStretch(1,2); grid.setRowStretch(3,1)
         self.build_settings()
         history = QWidget(); h = QVBoxLayout(history)
         h.addWidget(QLabel("Saved session summaries · demo sessions are labelled and excluded from daily focus."))
         self.history = QTableWidget(0,7); self.history.setHorizontalHeaderLabels(["Started","Mode","Source","Focus","Distraction","Streak","Alerts"])
         self.history.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.history.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.history.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.history.setAlternatingRowColors(True)
         h.addWidget(self.history); h.addWidget(self.button("Export session CSV",self.export))
         self.tabs.addTab(history,"Session archive")
         privacy = QLabel("Camera frames stay in memory. SQLite saves durations, scores and events on this PC.\n"
@@ -190,6 +235,17 @@ class MainWindow(QMainWindow):
             "Data folder: " + str(data_dir()))
         privacy.setWordWrap(True); privacy.setMargin(25); privacy.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.tabs.addTab(privacy,"Privacy & limits")
+        self.tabs.currentChanged.connect(self.fade_tab)
+
+    def fade_tab(self,index):
+        if self.settings.reduced_motion: return
+        widget = self.tabs.widget(index)
+        effect = QGraphicsOpacityEffect(widget); widget.setGraphicsEffect(effect)
+        animation = QPropertyAnimation(effect,b'opacity',self)
+        animation.setDuration(190); animation.setStartValue(.45); animation.setEndValue(1.)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.finished.connect(lambda: widget.setGraphicsEffect(None))
+        animation.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
     def build_settings(self):
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
@@ -218,6 +274,9 @@ class MainWindow(QMainWindow):
         spin("goal_minutes","Daily focus goal (minutes)",5,480)
         spin("volume","Sound volume (%)",0,100)
         spin("intensity","Reaction intensity (1 = gentle, 3 = chaotic)",1,3)
+        spin('animation_fps','Animation frames per second',15,60)
+        combo('fire_edges','Screen fire placement',['All edges','Sides','Bottom'])
+        check('screen_fire','Fire around screen edges (click-through)')
         for key,label in [("overlay","Enable desktop overlay"),("pet","Show desktop pet on launch (camera stays off)"),("fire","Cartoon fire"),("reduced_motion","Reduced motion"),("sound","Enable synthetic goblin shriek"),("paper_mode","Paper / keyboard mode: allow looking down without a visible phone")]: check(key,label)
         modelrow = QHBoxLayout(); self.modelpath = QLineEdit(self.settings.phone_model)
         modelrow.addWidget(self.modelpath); modelrow.addWidget(self.button("Browse local YOLO model",self.choose_model)); form.addRow("Optional phone model (.pt)",modelrow)
@@ -246,40 +305,53 @@ class MainWindow(QMainWindow):
         self.settings.phone_model = self.modelpath.text().strip()
         self.settings = self.settings.validated(); self.engine.settings = self.settings
         self.store.save_settings(self.settings); self.apply_theme()
+        self.screen_fire.clear()
+        self.update_scene()
         self.notice.setText("Settings saved. Camera/model changes apply after Stop and Start. Calibrate after moving the camera.")
         if not self.settings.overlay: self.overlay.hide()
 
     def apply_theme(self):
         accent = self.settings.accent
         if not QColor(accent).isValid(): accent = "#40dfcf"
-        panel = "qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #202b46,stop:1 #131b30)" if self.settings.style == "Aurora glass" else "#1b2232"
         self.setStyleSheet(f"""
-            QMainWindow, QWidget {{ background:#0d1221; color:#eaf0ff; font-family:'Segoe UI'; font-size:13px; }}
-            QFrame#panel {{ background:{panel}; border:1px solid #394665; border-radius:16px; }}
+            QMainWindow {{ background:#080d19; }}
+            QWidget {{ background:transparent; color:#eaf0ff; font-family:'Segoe UI'; font-size:13px; }}
+            QFrame#panel {{ background:transparent; border:0; }}
             QFrame#panel QLabel, QFrame#panel QWidget {{ background:transparent; }}
-            QLabel#brand {{ font-size:32px; font-weight:750; color:{accent}; }}
+            QLabel#brand {{ font-size:30px; font-weight:750; color:#eff9ff; }}
             QLabel#metric {{ font-size:29px; font-weight:700; }}
             QLabel#sectionTitle {{ font-size:14px; color:#bdc9e5; font-weight:600; }}
             QLabel#muted {{ color:#94a5c7; }}
-            QLabel#notice {{ background:#202d47; border-left:3px solid {accent}; padding:10px; border-radius:5px; }}
+            QLabel#notice {{ background:rgba(39,64,88,150); border:1px solid #385771; border-left:3px solid {accent}; padding:10px; border-radius:9px; }}
+            QLabel#signalBadges {{ color:{accent}; background:rgba(26,67,75,90); border-radius:7px; padding:7px; }}
             QLabel#preview {{ background:#090f1d; border-radius:10px; color:#97a7c5; }}
-            QPushButton {{ background:#26334e; border:1px solid #435571; border-radius:8px; padding:9px 13px; }}
+            QPushButton {{ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #30425d,stop:1 #1c2b43); border:1px solid #506783; border-radius:9px; padding:10px 13px; }}
             QPushButton:hover {{ border-color:{accent}; background:#344662; }}
             QPushButton:focus {{ border:2px solid {accent}; }}
             QPushButton:disabled {{ color:#6e7b92; background:#182032; }}
             QPushButton#primary {{ background:{accent}; color:#0d1420; font-weight:700; }}
+            QPushButton#primary:disabled {{ background:#234b50; color:#7fa3ab; border-color:#365d67; }}
             QTabWidget::pane {{ border:0; }}
-            QTabBar::tab {{ background:#182239; padding:11px 20px; margin-right:5px; border-radius:6px; }}
-            QTabBar::tab:selected {{ background:#34425f; color:{accent}; }}
+            QTabBar::tab {{ background:rgba(25,39,62,180); padding:12px 23px; margin-right:6px; border-top-left-radius:10px; border-top-right-radius:10px; border-bottom:2px solid transparent; }}
+            QTabBar::tab:selected {{ background:rgba(58,81,112,190); color:{accent}; border-bottom:2px solid {accent}; }}
             QSpinBox,QDoubleSpinBox,QComboBox,QLineEdit {{ padding:7px; background:#202b43; border:1px solid #455674; border-radius:5px; }}
             QTableWidget {{ gridline-color:#34405c; alternate-background-color:#1c263c; }}
             QHeaderView::section {{ background:#283550; padding:9px; border:0; }}
             QScrollArea {{ border:0; }}
+            QScrollBar:vertical {{ background:#121e31; width:9px; margin:0; }}
+            QScrollBar::handle:vertical {{ background:#4a607e; min-height:30px; border-radius:4px; }}
+            QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical {{ height:0; }}
+            QProgressBar {{ background:#111e31; border:1px solid #3d536e; border-radius:5px; max-height:10px; min-height:10px; }}
+            QProgressBar::chunk {{ background:{accent}; border-radius:4px; }}
         """)
         self.chart.accent = self.week.accent = self.ring.accent = accent
+        self.ring.reduced = self.settings.reduced_motion
         for m in (self.mascot,self.overlay):
             m.personality = self.settings.personality; m.reduced = self.settings.reduced_motion
             m.fire = self.settings.fire; m.intensity = self.settings.intensity
+            m.timer.setInterval(round(1000/max(15,min(60,self.settings.animation_fps))))
+        for panel in self.findChildren(GlassPanel):
+            panel.accent = accent; panel.quiet = self.settings.style == 'Quiet graphite'; panel.update()
         self.update()
 
     def busy(self):
@@ -302,6 +374,7 @@ class MainWindow(QMainWindow):
 
     def begin(self,demo):
         self.demo = demo; self.paused = False
+        self.preview.setProperty('demo',demo)
         self.engine = AttentionEngine(copy.deepcopy(self.settings))
         if demo: self.engine.settings.calibrated = True
         self.sid = self.store.start(self.settings.mode,demo)
@@ -323,6 +396,8 @@ class MainWindow(QMainWindow):
             if self.worker: self.worker.stop()
             self.preview.clear(); self.preview.setText("Paused · camera closing")
             self.overlay.hide(); self.calibration = None
+            self.screen_fire.clear(); self.preview_until = 0.
+            if hasattr(self,'sound_effect'): self.sound_effect.stop()
             self.engine.take_break()
             self.pause_button.setText("Resume"); self.store.event(self.sid,"pause","User paused monitoring")
         elif not self.busy():
@@ -331,12 +406,15 @@ class MainWindow(QMainWindow):
             self.last_tick = time.monotonic(); self.show_overlay()
 
     def stop(self):
+        self.preview_until = 0.; self.screen_fire.clear()
+        if hasattr(self,'sound_effect'): self.sound_effect.stop()
         if self.worker: self.worker.stop()
         if self.sid is not None:
             self.store.checkpoint(self.sid,self.engine.summary(),True)
             self.sid = None
         self.paused = False; self.calibration = None
         self.preview.clear(); self.preview.setText("Camera off / closing\nNo images are recorded.")
+        self.preview.setProperty('demo',False)
         self.overlay.hide(); self.mascot.state = "ready"
         self.pause_button.setText("Pause"); self.start_button.setEnabled(True); self.demo_button.setEnabled(True)
         self.notice.setText("Monitoring stopped. Session saved locally.")
@@ -362,18 +440,25 @@ class MainWindow(QMainWindow):
         elif action == 'hide': self.overlay.hide()
 
     def preview_reaction(self):
-        self.mascot.state = self.overlay.state = "angry"; self.show_overlay()
+        self.preview_until = time.monotonic()+4
+        self.update_scene(); self.show_overlay()
         self.shriek()
         QTimer.singleShot(4000,lambda: self.restore_mascot())
 
     def restore_mascot(self):
-        self.mascot.state = self.overlay.state = self.engine.state if self.sid else "ready"
+        self.update_scene()
+
+    def update_scene(self):
+        state = 'angry' if time.monotonic() < self.preview_until else self.engine.state if self.sid and not self.paused else 'ready'
+        self.mascot.state = self.overlay.state = state
+        self.screen_fire.configure(state == 'angry',self.settings)
 
     def take_break(self):
         if self.sid:
             self.engine.take_break(); self.store.event(self.sid,"break","User requested break")
             if not self.paused: self.pause()
         self.mascot.state = self.overlay.state = "break"; self.show_overlay()
+        self.screen_fire.clear()
         self.notice.setText("Break time. Monitoring is paused. Stand, stretch, walk; press Resume when ready.")
 
     def shriek(self):
@@ -435,7 +520,7 @@ class MainWindow(QMainWindow):
             self.observation = Observation(valid=False)
             self.preview.clear(); self.preview.setText("Camera signal unavailable")
         decision = self.engine.step(self.observation,dt)
-        self.mascot.state = self.overlay.state = decision.state
+        self.update_scene()
         self.state_label.setText(decision.state.capitalize()+"\nEstimated attention")
         self.ring.value = decision.confidence; self.ring.update()
         self.footer.setText(f"Break timer {duration(self.engine.since_break)} / {self.settings.break_minutes}m · Goal {self.settings.goal_minutes}m/day · "
@@ -452,6 +537,11 @@ class MainWindow(QMainWindow):
             self.chart.values = list(self.samples); self.chart.update()
             self.store.sample(self.sid,self.engine.active,decision.confidence,decision.state)
             self.store.checkpoint(self.sid,self.engine.summary())
+            self.refresh_daily()
+            self.signal_badges.setText(f"Face {'visible' if self.observation.face else 'absent'}     Phone {'visible' if self.observation.phone else 'not detected / off'}     {'Demo' if self.demo else 'Camera live'}")
+            remaining = max(0,self.settings.break_minutes*60-self.engine.since_break)
+            self.break_label.setText(f'Next stretch · {duration(remaining)}')
+            self.break_progress.setValue(round(self.engine.since_break/(self.settings.break_minutes*60)*100))
         if self.engine.break_due():
             self.store.event(self.sid,"reminder","Elapsed monitoring break reminder")
             self.take_break()
@@ -462,7 +552,13 @@ class MainWindow(QMainWindow):
             s = json.loads(payload)
             values = [started[:16].replace("T"," "),mode,"Demo" if demo else "Camera",duration(s.get("focus",0)),duration(s.get("distracted",0)),duration(s.get("longest",0)),str(s.get("alerts",0))]
             for j,v in enumerate(values): self.history.setItem(i,j,QTableWidgetItem(v))
+        self.refresh_daily()
+
+    def refresh_daily(self):
         self.week.values = self.store.daily(); self.week.update()
+        today_focus = self.week.values[-1][1] if self.week.values else 0
+        self.goal_label.setText(f'Daily goal · {today_focus/60:.0f} / {self.settings.goal_minutes} min')
+        self.goal_progress.setValue(round(min(100,today_focus/(self.settings.goal_minutes*60)*100)))
 
     def export(self):
         path,_ = QFileDialog.getSaveFileName(self,"Export summaries","focus-sessions.csv","CSV (*.csv)")
@@ -473,4 +569,4 @@ class MainWindow(QMainWindow):
         if self.busy():
             self.notice.setText("Releasing camera before closing…")
             event.ignore(); QTimer.singleShot(250,self.close); return
-        self.overlay.close(); self.store.close(); event.accept()
+        self.screen_fire.clear(); self.overlay.close(); self.store.close(); event.accept()

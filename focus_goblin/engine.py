@@ -21,6 +21,9 @@ class Settings:
     pet: bool = True
     reduced_motion: bool = False
     fire: bool = True
+    screen_fire: bool = True
+    fire_edges: str = 'All edges'
+    animation_fps: int = 30
     sound: bool = False
     volume: int = 35
     intensity: int = 2
@@ -43,6 +46,9 @@ class Settings:
         s.head_tolerance = max(.03, float(s.head_tolerance))
         s.gaze_tolerance = max(.03, float(s.gaze_tolerance))
         s.phone_confidence = max(.1, min(.95, float(s.phone_confidence)))
+        s.animation_fps = max(15,min(60,int(s.animation_fps)))
+        s.goal_minutes = max(1,int(s.goal_minutes))
+        if s.fire_edges not in ('All edges','Sides','Bottom'): s.fire_edges = 'All edges'
         if len(s.baseline) != 4 or not all(math.isfinite(float(v)) for v in s.baseline):
             s.baseline = (0., 0., .5, .5)
             s.calibrated = False

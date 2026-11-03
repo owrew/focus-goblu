@@ -1,6 +1,6 @@
 # Focus Goblin · local desktop MVP
 
-A Windows-first Python application with webcam attention estimates, an original animated goblin desktop overlay, a sloth break reminder, and local session analytics. Version 0.1.0.
+A Windows-first Python application with webcam attention estimates, an original animated goblin desktop overlay, a sloth break reminder, and local session analytics. Version **0.2.0**. See [v0.2 release notes](docs/RELEASE-v0.2.md) for the glass dashboard, new logo, smooth transitions, independent phone worker and screen-edge fire.
 
 ## Run on this computer
 
@@ -50,9 +50,9 @@ Advanced optional alternative: install `requirements-phone.txt` and select a tru
 
 This is an attention **proxy**, not a mind-reading or medical tool. Head pose is a normalized landmark ratio, not solvePnP angles in degrees. Iris position estimates are noisy, especially with glasses, dim light, low camera angles, or eye-only movements. There is no screen-coordinate gaze mapping, emotion/laughter inference, diagnosis, or detection of which phone app is open. Recalibrate after moving the camera, changing your seat, or switching monitor layout. Calibration is local and camera-specific only by user convention; no biometric identity is created.
 
-The FPS setting is a target, not a guarantee. YOLO runs in the camera worker, so its inference can reduce face-update rate temporarily. Start with phone detection off to measure responsiveness, then enable it. The development camera negotiated 720p, but a short combined test achieved only about **3 observations/sec** in the current conditions with no face detected. Smooth operation at the 12 FPS target and real-user gaze/phone accuracy remain unverified. See `docs/VALIDATION.md` for checks actually performed. There is no automatic resource-based adaptation yet.
+Camera FPS and animation FPS are separate targets. YOLO now runs in its own bounded worker. The v0.2 webcam spot check negotiated 720p and achieved about **4.3 observations/sec**, with no face detected in that scene. Smooth camera operation at the 12 FPS target and real-user gaze/phone accuracy remain unverified. Pet animation targets 30 FPS independently (15–60 selectable), subject to machine load. See `docs/VALIDATION.md` and the v0.2 release notes. There is no automatic resource-based adaptation yet.
 
-No global hotkey, tray/background service, startup registration, camera recording, website blocker, phone companion, custom sticker import, full desktop-wide particle field, or photorealistic sprite/voice pack is included. Overlay chaos stays inside its movable 390×310 transparent window and never manipulates actual desktop elements. Glass appearance uses gradients, not Windows compositor backdrop blur. Personality changes captions; motion/sound repertoire is shared. Daily bars show the last seven days with recorded sessions (not a complete calendar heatmap). CSV export covers the newest 100 summaries. Historical samples and events are retained in SQLite; the chart shows the current session's latest 300 samples.
+No global hotkey, tray/background service, startup registration, camera recording, website blocker, phone companion, custom sticker import, full desktop-wide particle field, or photorealistic sprite/voice pack is included. The transparent pet is separate from click-through 76-pixel fire strips at configurable screen edges. Effects never manipulate desktop elements. Glass panels use painted translucent layers, not compositor backdrop blur. Personality changes captions; motion/sound repertoire is shared. Daily bars cover seven calendar days. CSV export covers the newest 100 summaries. Historical samples/events remain in SQLite; the line chart shows the current session's latest 300 samples.
 
 Breaks measure elapsed monitoring time, not actual sitting. Face absence is not automatically counted as a confirmed break. **Take a break** resets the timer and pauses capture. A long camera stall is excluded from focus, and dt is capped to avoid over-crediting unobserved time.
 
@@ -71,7 +71,7 @@ To reset your history, close the app first, back up this folder if wanted, then 
 powershell -NoProfile -ExecutionPolicy Bypass -File .\package.ps1
 ```
 
-Packaging produces a folder build: `dist\FocusGoblin\FocusGoblin.exe`. Keep that whole folder together. Packaging bundles the MediaPipe assets. It excludes optional PyTorch/Ultralytics; the OpenCV tiny detector still works with external weights. Copy `models` alongside the build and select its `.weights` file. The binary is unsigned. Package size is substantial because Qt and MediaPipe are bundled. It is not an installer.
+Packaging produces a folder build: `dist\FocusGoblin-v0.2\FocusGoblin-v0.2.exe`. Keep that whole folder together. Packaging bundles the logo and MediaPipe assets. It excludes optional PyTorch/Ultralytics; the OpenCV tiny detector works with external weights. Copy `models` alongside the build and select its `.weights` file. The binary is unsigned and is a portable folder build rather than an installer.
 
 ## Source layout
 

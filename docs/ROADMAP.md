@@ -15,7 +15,7 @@ On the actual i3/8 GB laptop, test camera framing under several light conditions
 
 ## Further implementation
 
-- Move phone inference to its own worker, add adaptive throttling and per-backend timing charts.
+- Phone inference moved to its own bounded worker in v0.2. Next: adaptive throttling and per-backend timing charts.
 - Upgrade legacy FaceMesh to current Tasks API with explicit model lifecycle; add geometric head-pose estimation and multi-point screen calibration if justified by measured accuracy.
 - Add camera-specific calibration profiles and smoothing/quality gates for partial faces.
 - Add optional user-supplied angry-goblin sticker/sprite packs, richer run/return choreography, local voice packs, tray controls and a configurable global stop hotkey.

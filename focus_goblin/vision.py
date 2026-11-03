@@ -8,6 +8,43 @@ from PySide6.QtGui import QImage
 from .engine import Observation
 
 
+class PhoneWorker(threading.Thread):
+    """One pending frame. Heavy phone inference cannot block face updates."""
+    def __init__(self, model, confidence, status):
+        super().__init__(daemon=True,name='FocusGoblinPhone')
+        self.model = model; self.confidence = confidence; self.status = status
+        self.lock = threading.Lock(); self.stopping = threading.Event()
+        self.frame = None; self.result = (False,0.)
+
+    def submit(self,frame):
+        with self.lock: self.frame = frame
+
+    def visible(self):
+        with self.lock: visible,stamp = self.result
+        return visible and time.monotonic()-stamp < 4
+
+    def run(self):
+        while not self.stopping.is_set():
+            with self.lock: frame,self.frame = self.frame,None
+            if frame is None:
+                self.stopping.wait(.05); continue
+            try:
+                if hasattr(self.model,'predict_phone'): visible = self.model.predict_phone(frame)
+                else:
+                    predictions = self.model.predict(frame,imgsz=320,device='cpu',classes=[67],conf=self.confidence,verbose=False)
+                    visible = any(len(p.boxes) for p in predictions)
+                with self.lock: self.result = (bool(visible),time.monotonic())
+            except Exception as exc:
+                self.status.emit(f'Phone detector disabled: {exc}')
+                with self.lock: self.result = (False,0.)
+                break
+            self.stopping.wait(2.)
+
+    def stop(self):
+        self.stopping.set()
+        with self.lock: self.frame = None; self.result = (False,0.)
+
+
 class VisionWorker(QThread):
     status = Signal(str)
 
@@ -24,7 +61,7 @@ class VisionWorker(QThread):
         return result
 
     def run(self):
-        cap = mesh = None
+        cap = mesh = phone_worker = None
         try:
             import cv2
             import mediapipe as mp
@@ -57,8 +94,8 @@ class VisionWorker(QThread):
                 raise RuntimeError("Camera unavailable. Check Windows camera permissions or close other camera apps.")
             actual = f"{int(cap.get(3))}×{int(cap.get(4))}"
             self.status.emit(f"Camera active · {actual} · phone {'enabled' if phone_model else 'off'}")
-            last_phone = -10.
-            phone = False
+            if phone_model:
+                phone_worker = PhoneWorker(phone_model,s.phone_confidence,self.status); phone_worker.start()
             while not self.stop_event.is_set():
                 began = time.monotonic()
                 ok, frame = cap.read()
@@ -86,18 +123,9 @@ class VisionWorker(QThread):
                     obs.eyes_open = abs(lm[159].y-lm[145].y)/max(abs(lm[33].x-lm[133].x), .001) > .12
                     for i in (1,33,263,468,473):
                         cv2.circle(rgb, (int(lm[i].x*640),int(lm[i].y*360)), 2, (64,223,207), -1)
-                if phone_model and began-last_phone >= 2:
-                    try:
-                        if hasattr(phone_model,'predict_phone'):
-                            phone = phone_model.predict_phone(small)
-                        else:
-                            predictions = phone_model.predict(small, imgsz=320, device="cpu", classes=[67], conf=s.phone_confidence, verbose=False)
-                            phone = any(len(p.boxes) for p in predictions)
-                        last_phone = began
-                    except Exception as exc:
-                        self.status.emit(f"Phone detector disabled: {exc}")
-                        phone_model, phone = None, False
-                obs.phone = phone
+                if phone_worker:
+                    phone_worker.submit(small)
+                    obs.phone = phone_worker.visible()
                 image = QImage(rgb.data,640,360,rgb.strides[0],QImage.Format.Format_RGB888).copy()
                 with self.lock:
                     self.latest = (obs, image, time.monotonic(), time.monotonic()-began)
@@ -105,6 +133,8 @@ class VisionWorker(QThread):
         except Exception as exc:
             self.status.emit(f"Camera error · {exc}")
         finally:
+            if phone_worker:
+                phone_worker.stop(); phone_worker.join(timeout=3)
             if cap is not None:
                 cap.release()
             if mesh is not None:

@@ -10,7 +10,7 @@ def test_roundtrip_and_demo_exclusion(tmp_path):
     demo = s.start('Study',True); s.checkpoint(demo,{'focus':999},True)
     real = s.start('Work'); s.event(real,'state','focused'); s.sample(real,1,.8,'focused')
     s.checkpoint(real,{'focus':60},True)
-    assert s.daily()[0][1] == 60
+    assert len(s.daily()) == 7 and s.daily()[-1][1] == 60
     assert len(s.history()) == 2
     out = tmp_path/'export.csv'; s.export(out)
     assert 'summary_json' in out.read_text(encoding='utf-8-sig')

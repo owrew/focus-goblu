@@ -4,7 +4,7 @@ Source project on this computer:
 C:\Users\awais\OneDrive\Downloads\Computer vision program\focus-goblin
 
 Installed-source launch: double-click Launch Focus Goblin.cmd.
-Portable build: open FocusGoblin.exe in the Windows folder build.
+Portable build: open FocusGoblin-v0.2.exe in the Windows folder build.
 
 The transparent desktop goblin pet appears with the camera OFF.
 Drag to move; right-click for controls. It remains visible when the dashboard is minimized.
@@ -23,7 +23,10 @@ Show cave brings the pet back without starting the camera.
 All camera processing is local. No raw video is stored.
 Session data: %LOCALAPPDATA%\FocusGoblin\focus.sqlite3
 
-MVP LIMIT: approximate gaze; current short camera test achieved about 3 observations/sec,
+Preview reaction shows the pet and separate click-through screen-edge fire.
+Control room includes All edges / Sides / Bottom placement and 15-60 animation FPS.
+
+MVP LIMIT: approximate gaze; latest short camera test achieved about 4.3 observations/sec,
 not the 12 FPS target. Real-user tracking, calibration and phone accuracy need your test.
 
 README.md explains setup, phone models, packaging, controls and limitations.

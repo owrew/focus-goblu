@@ -1,5 +1,9 @@
 # Architecture and feature specification
 
+## v0.2 additions
+
+Phone inference now runs in a separate PhoneWorker with one pending frame and stale-result expiry. Mascot transitions cache only their own rendered widget briefly in memory for crossfading; no camera/desktop image is saved. ScreenFire manages narrow transparent, input-transparent native windows at monitor edges. visuals.py provides native painted translucent glass panels and the demo-only sensor illustration. The dashboard uses the new generated logo, live goal/break progress and seven calendar-day bars. See RELEASE-v0.2.md for current behavior where it supersedes the v0.1 foundation below.
+
 ## Runtime architecture
 
 `OpenCV camera → MediaPipe + optional YOLO → latest-frame mailbox → attention rules → dashboard / overlay / SQLite`

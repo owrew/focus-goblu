@@ -3,7 +3,7 @@ import csv
 import json
 import os
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from dataclasses import asdict
 from .engine import Settings
@@ -75,7 +75,8 @@ class Store:
         for started, payload in self.db.execute("SELECT started,summary FROM sessions WHERE demo=0 ORDER BY started"):
             day = started[:10]
             days[day] = days.get(day, 0) + json.loads(payload).get("focus", 0)
-        return list(days.items())[-7:]
+        today = datetime.now().date()
+        return [((today-timedelta(days=i)).isoformat(),days.get((today-timedelta(days=i)).isoformat(),0)) for i in range(6,-1,-1)]
 
     def export(self, path):
         with open(path, "w", newline="", encoding="utf-8-sig") as f:

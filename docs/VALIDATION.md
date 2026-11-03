@@ -1,5 +1,11 @@
 # Local validation · 2026-11-03
 
+## v0.2 upgrade
+
+**14 tests passed**, compilation/dependency checks passed. New checks cover click-through edge flames and their cleanup, gradual character state/position changes, and nonblocking submission to a slow phone worker. Logo alpha is genuine (corner alpha 0). Windows dashboard, idle pet, angry state, sloth state and a flame strip were rendered and inspected. The screenshot is simulated demo data, not a webcam recording.
+
+Latest 720p camera test with the separate phone worker: 36 observations over the steady sample (~4.3/sec), average capture/face loop ~239 ms, zero face-positive observations, clean capture release. Prior v0.1 results below are historical spot checks, not a controlled comparative benchmark. Live gaze/phone accuracy and the 12 FPS camera target remain unverified. See RELEASE-v0.2.md for changes and remaining limits.
+
 ## Verified
 
 - Python 3.11.9 x64; PySide6 6.8.3; MediaPipe 0.10.21; OpenCV contrib 4.11.0; NumPy 1.26.4.

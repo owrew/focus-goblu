@@ -1,7 +1,9 @@
 import argparse
 import sys
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QLockFile
 from .ui import MainWindow
+from .storage import data_dir
 
 
 def main():
@@ -11,6 +13,10 @@ def main():
     args = parser.parse_args()
     app = QApplication(sys.argv)
     app.setApplicationName("Focus Goblin")
+    lock = QLockFile(str(data_dir()/'application.lock'))
+    if not lock.tryLock(0):
+        QMessageBox.information(None,'Focus Goblin is already open','Open the existing dashboard or right-click your desktop goblin. Close it before starting another copy.')
+        return 0
     window = MainWindow(); window.show()
     if args.self_test:
         import json

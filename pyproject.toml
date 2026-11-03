@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "focus-goblin-local"
-version = "0.1.0"
+version = "0.2.0"
 description = "Private local webcam attention estimates with an animated desktop goblin"
 requires-python = ">=3.11,<3.12"
 dynamic = ["dependencies"]
@@ -20,3 +20,6 @@ include = ["focus_goblin*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+focus_goblin = ['assets/*.png', 'assets/*.ico', 'assets/*.md']
