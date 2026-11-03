@@ -35,6 +35,8 @@ try {
     }
     Write-Output $remote.url
     Write-Output "Verified private remote HEAD: $(git rev-parse HEAD)"
+    gh api "repos/$repository/commits?per_page=100" --jq '"GitHub-verified signatures: " + ([.[] | select(.commit.verification.verified)] | length | tostring) + "/" + (length | tostring)'
+    Require-Success 'GitHub signature check'
 } finally {
     $env:GH_TOKEN = $previousToken
 }
