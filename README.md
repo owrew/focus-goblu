@@ -1,5 +1,52 @@
 # Focus Goblin 0.3.0
 
+<img src="focus_goblin/assets/goblin-logo.png" alt="Focus Goblin mascot" width="180">
+
+**Project codename: Mistwatch** · Created by **Awais Ali Rafaqat**
+
+Focus Goblin has two editions. The Windows desktop app estimates attention from local webcam input and animates a desktop pet. The Chrome and Edge companion is a browser focus timer with a task field, pause and resume, and a completion notification. The companion runs independently.
+
+<img src="docs/images/desktop-demo.png" alt="Focus Goblin observatory in camera-free demo mode" width="760">
+
+| Capability | Windows desktop | Browser companion |
+| --- | --- | --- |
+| Task and timed sessions | Yes | Yes |
+| Local state | SQLite | Browser extension storage |
+| Face, gaze and phone estimates | Yes | Desktop edition |
+| Desktop pet and effects | Yes | Desktop edition |
+
+## How data moves
+
+```text
+Webcam --> Face lighting --> Face landmarks --> Attention rules --> Desktop pet
+   |                                                 |
+   +--> Local phone detector ------------------------+
+                                                     |
+Task plan ---------------------------------------> SQLite --> History / export
+
+Browser popup --> Extension worker --> Local storage + alarm --> Notification
+```
+
+## Database
+
+| Table | Contents |
+| --- | --- |
+| settings | One JSON settings record, including calibration and preferences |
+| sessions | Start/end, mode, demo marker and computed summary |
+| session_plans | Session name, target duration and task checklist |
+| events | Timestamped alerts, breaks and false-alarm feedback |
+| samples | Elapsed time, confidence and attention state |
+
+The database uses WAL mode and foreign keys. Each event, sample and plan refers to its session. The database stays in the user's local application data directory. Back up the database from the app before moving installations. Browser task text and timer state use a separate local store.
+
+## Browser companion and publishing
+
+Load the `extension` directory unpacked through the browser's extensions page with developer mode enabled. See [Store submission guide](docs/BROWSER-PUBLISHING.md) and [browser privacy policy](docs/BROWSER-PRIVACY.md).
+
+## Project history
+
+The repository preserves the three saved desktop releases as chronological snapshot commits, then records subsequent work by feature. These snapshots capture available release states. See [commit import and verification](docs/HISTORY.md).
+
 A local Windows desktop companion with webcam attention estimates, phone detection, a floating goblin, task sessions and an animated waterfall/glass dashboard.
 
 ## Launch
@@ -94,6 +141,12 @@ tests/            rules, regressions, lighting, storage and UI checks
 packaging/        PyInstaller entry and Inno Setup installer definition
 ```
 
-See **docs/RELEASE-v0.3.md** for current feature details and limits; prior release notes are historical. Nothing has been published to GitHub. The name is the user's chosen project name, not a trademark-availability claim.
+See **docs/RELEASE-v0.3.md** for desktop feature details and limitations. Prior release notes describe earlier builds.
+
+## Support
+
+If you find Focus Goblin useful, you can support Awais Ali Rafaqat on Ko-fi.
+
+[☕ Buy me a coffee on Ko-fi](https://ko-fi.com/Z3J629YD9V/)
 
 Third-party assets retain their upstream terms. YOLOX is from [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/object_detection_yolox); its Apache 2.0 license is included in models. [OpenCV's Region implementation](https://github.com/opencv/opencv/blob/4.x/modules/dnn/src/layers/region_layer.cpp) documents the weighted Darknet scores. Other dependencies: [MediaPipe](https://github.com/google-ai-edge/mediapipe), [Qt for Python](https://doc.qt.io/qtforpython-6/), [Inno Setup](https://jrsoftware.org/). Optional Ultralytics .pt support is untested in this build and has separate upstream licensing/dependency requirements.
