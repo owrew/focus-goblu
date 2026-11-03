@@ -30,6 +30,9 @@ class Store:
           CREATE TABLE IF NOT EXISTS samples(id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL,
             elapsed REAL NOT NULL, confidence REAL NOT NULL, state TEXT NOT NULL,
             FOREIGN KEY(session_id) REFERENCES sessions(id));
+          CREATE TABLE IF NOT EXISTS session_plans(session_id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL, duration_seconds INTEGER NOT NULL, tasks_json TEXT NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES sessions(id));
         ''')
         # A process exit leaves an honest interrupted session, with latest checkpoint.
         interrupted = self.db.execute("SELECT id FROM sessions WHERE ended IS NULL").fetchall()
@@ -41,7 +44,10 @@ class Store:
     def load_settings(self):
         row = self.db.execute("SELECT payload FROM settings WHERE id=1").fetchone()
         try:
-            return Settings(**json.loads(row[0])).validated() if row else Settings()
+            if not row:return Settings()
+            payload=json.loads(row[0])
+            if 'phone_backend' not in payload:payload['phone_confidence']=min(.25,float(payload.get('phone_confidence',.25)))
+            return Settings(**payload).validated()
         except (TypeError, ValueError, json.JSONDecodeError):
             return Settings()
 
@@ -71,12 +77,56 @@ class Store:
         return self.db.execute("SELECT id,started,mode,demo,summary FROM sessions ORDER BY id DESC LIMIT 100").fetchall()
 
     def daily(self):
+        return self.daily_range(7)
+
+    def daily_range(self,count=7):
         days = {}
         for started, payload in self.db.execute("SELECT started,summary FROM sessions WHERE demo=0 ORDER BY started"):
             day = started[:10]
             days[day] = days.get(day, 0) + json.loads(payload).get("focus", 0)
         today = datetime.now().date()
-        return [((today-timedelta(days=i)).isoformat(),days.get((today-timedelta(days=i)).isoformat(),0)) for i in range(6,-1,-1)]
+        count = max(1,min(366,int(count)))
+        return [((today-timedelta(days=i)).isoformat(),days.get((today-timedelta(days=i)).isoformat(),0)) for i in range(count-1,-1,-1)]
+
+    def save_plan(self,sid,name,duration,tasks):
+        self.db.execute('INSERT OR REPLACE INTO session_plans VALUES(?,?,?,?)',(sid,name,int(duration),json.dumps(tasks)))
+        self.db.commit()
+
+    def plan(self,sid):
+        row = self.db.execute('SELECT name,duration_seconds,tasks_json FROM session_plans WHERE session_id=?',(sid,)).fetchone()
+        return (row[0],row[1],json.loads(row[2])) if row else ('Unplanned',0,[])
+
+    def events_for(self,sid):
+        return self.db.execute('SELECT at,kind,detail FROM events WHERE session_id=? ORDER BY id DESC LIMIT 200',(sid,)).fetchall()
+
+    def backup(self,path):
+        target = sqlite3.connect(path)
+        try: self.db.backup(target)
+        finally: target.close()
+
+    def delete_sessions(self,ids):
+        with self.db:
+            for sid in ids:
+                for table in ('samples','events','session_plans'):
+                    self.db.execute(f'DELETE FROM {table} WHERE session_id=?',(int(sid),))
+                self.db.execute('DELETE FROM sessions WHERE id=?',(int(sid),))
+
+    def prune(self,days,exclude=None):
+        if int(days) <= 0: return 0
+        cutoff = (datetime.now()-timedelta(days=int(days))).date().isoformat()
+        ids = [r[0] for r in self.db.execute('SELECT id FROM sessions WHERE ended IS NOT NULL AND started<?',(cutoff,)) if r[0] != exclude]
+        if ids:
+            self.backup(data_dir()/f'before-retention-{datetime.now():%Y%m%d-%H%M%S}.sqlite3')
+            self.delete_sessions(ids)
+        return len(ids)
+
+    def export_all(self,path):
+        data = {}
+        for table in ('sessions','session_plans','events','samples'):
+            cursor = self.db.execute(f'SELECT * FROM {table}')
+            names = [col[0] for col in cursor.description]
+            data[table] = [dict(zip(names,row)) for row in cursor]
+        Path(path).write_text(json.dumps(data,indent=2),encoding='utf-8')
 
     def export(self, path):
         with open(path, "w", newline="", encoding="utf-8-sig") as f:

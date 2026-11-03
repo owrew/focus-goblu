@@ -1,5 +1,9 @@
 # Architecture and feature specification
 
+## v0.3 current architecture
+
+The current implementation adds lighting.py (face-weighted tone mapping), windows.py (native global pause and per-user opt-in startup), and workspace.py (session plans/tasks, feedback, grouped settings, historical charts, data controls and update picker). phone.py includes automatic model discovery and OpenCV YOLOX-S plus the corrected Eco Darknet decoder. session_plans is an additive SQLite table; original data is retained. The installer has a stable per-user path/ID, separate from local user history. The waterfall background is generated scenery with application-owned blurred pixels; no desktop capture occurs. See RELEASE-v0.3.md and README.md for current behavior; the older sections below record previous designs.
+
 ## v0.2 additions
 
 Phone inference now runs in a separate PhoneWorker with one pending frame and stale-result expiry. Mascot transitions cache only their own rendered widget briefly in memory for crossfading; no camera/desktop image is saved. ScreenFire manages narrow transparent, input-transparent native windows at monitor edges. visuals.py provides native painted translucent glass panels and the demo-only sensor illustration. The dashboard uses the new generated logo, live goal/break progress and seven calendar-day bars. See RELEASE-v0.2.md for current behavior where it supersedes the v0.1 foundation below.

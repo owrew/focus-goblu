@@ -1,5 +1,13 @@
 # Local validation · 2026-11-03
 
+## v0.3 current checks
+
+19 automated tests passed, plus compilation/dependency checks. Regressions cover the Darknet confidence error, letterbox mapping, bright-background/dark-face correction without input mutation, false-alarm suppression without fabricated focus, session plans/tasks, backup/export/deletion and completion pause. Native Windows checks successfully registered the global shortcut and dispatched pause/resume through WM_HOTKEY. Dashboard, settings, Focus desk and history views were rendered and reviewed with real application blur enabled.
+
+Five COCO128 phone-labelled reference images were checked at threshold .25. YOLOX-S produced three candidates overlapping phone ground truth (best IoUs .884, .456, .627); two images were missed. Eco YOLOv4 at 416 produced zero and at 608 produced one. This small development sanity check is not a benchmark or user-device validation. No COCO/reference images are included in deliverables.
+
+1280×720 camera + YOLOX + lighting spot check: 26 observations, ~3.0/sec, ~351 ms average face/capture loop, zero faces in the scene, and clean capture release. Actual-user gaze/phone/exposure accuracy, consistent 12 FPS, other webcams and clean-PC portability remain unverified. No raw camera frames were stored. Packaging and installer checks are recorded in INSTALLATION-CHECKS.md.
+
 ## v0.2 upgrade
 
 **14 tests passed**, compilation/dependency checks passed. New checks cover click-through edge flames and their cleanup, gradual character state/position changes, and nonblocking submission to a slow phone worker. Logo alpha is genuine (corner alpha 0). Windows dashboard, idle pet, angry state, sloth state and a flame strip were rendered and inspected. The screenshot is simulated demo data, not a webcam recording.

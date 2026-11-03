@@ -2,7 +2,7 @@
 import math
 import time
 from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, Signal
-from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF, QFont, QLinearGradient
+from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF, QFont, QLinearGradient, QCursor
 from PySide6.QtWidgets import QWidget, QApplication, QMenu
 
 LINES = {
@@ -25,6 +25,8 @@ class Mascot(QWidget):
         self._anger = 0.
         self._last_tick = time.monotonic()
         self.personality = "Angry Goblin"
+        self.name='Grumble';self.body_color='#70d5ad';self.follow_cursor=True;self.poke_enabled=True
+        self.pointer=(0.,0.);self.press_point=None
         self.phase = 0.
         self.reduced = False
         self.fire = True
@@ -57,13 +59,19 @@ class Mascot(QWidget):
     def animate(self):
         now = time.monotonic(); dt = min(.1,now-self._last_tick); self._last_tick = now
         self.phase += dt
+        if self.follow_cursor:
+            cursor=self.mapFromGlobal(QCursor.pos())
+            target=(max(-1.,min(1.,(cursor.x()-self.width()/2)/160)),max(-1.,min(1.,(cursor.y()-self.height()/2)/160)))
+            self.pointer=tuple(a+(b-a)*.18 for a,b in zip(self.pointer,target))
         self._transition = min(1.,self._transition+dt/.45)
         if self._transition >= 1: self._previous = None
         target_anger = 1. if self.state == 'angry' else .35 if self.state == 'warning' else 0.
+        if self.personality in ('Chill Monitor','Motivational Coach'):target_anger*=.4
         self._anger += (target_anger-self._anger)*(1-math.exp(-dt*7))
         if self.overlay and self.anchor and self.drag is None:
             rect = self.screen().availableGeometry()
-            travel = math.sin(self.phase*1.8)*min(260,rect.width()/4)*self._anger if self.intensity > 1 and not self.reduced else 0
+            speed={'Angry Goblin':1.8,'Meme Machine':3.1,'Motivational Coach':.7,'Sarcastic Supervisor':.35,'Chill Monitor':.2}.get(self.personality,1.8)
+            travel = math.sin(self.phase*speed)*min(260,rect.width()/4)*self._anger if self.intensity > 1 and not self.reduced else 0
             x = max(rect.left(),min(rect.right()-self.width(),self.anchor.x()+travel))
             easing = 1 if self.reduced else 1-math.exp(-dt*7)
             self.move(round(self.x()+(x-self.x())*easing),round(self.y()+(self.anchor.y()-self.y())*easing))
@@ -81,8 +89,9 @@ class Mascot(QWidget):
         super().hideEvent(event)
 
     def mousePressEvent(self, e):
-        if self.overlay and e.button() == Qt.MouseButton.LeftButton:
-            self.drag = e.globalPosition().toPoint() - self.pos()
+        if e.button() == Qt.MouseButton.LeftButton:
+            self.press_point=e.globalPosition().toPoint()
+            if self.overlay:self.drag = e.globalPosition().toPoint() - self.pos()
 
     def contextMenuEvent(self, event):
         if not self.overlay:
@@ -99,11 +108,13 @@ class Mascot(QWidget):
             self.anchor = self.pos()
 
     def mouseReleaseEvent(self, e):
+        if self.press_point is not None and (e.globalPosition().toPoint()-self.press_point).manhattanLength()<6 and self.poke_enabled:
+            self.action.emit('poke')
         self.drag = None
+        self.press_point=None
 
     def mouseDoubleClickEvent(self, e):
-        if self.overlay:
-            self.hide()
+        if self.poke_enabled:self.action.emit('poke')
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -148,7 +159,8 @@ class Mascot(QWidget):
                 p.drawLine(sign*25,10,sign*68,int(-30-abs(math.sin(t*2))*25))
             p.setPen(Qt.PenStyle.NoPen); ellipse(-7,-23,14,9,"#402e2b")
         else:
-            cool,hot = QColor('#70d5ad'),QColor('#ef757b')
+            cool,hot = QColor(self.body_color),QColor('#ef757b')
+            if not cool.isValid():cool=QColor('#70d5ad')
             skin = QColor.fromRgbF(*[cool.getRgbF()[i]+(hot.getRgbF()[i]-cool.getRgbF()[i])*self._anger for i in range(3)]).name()
             # Boots run, arms stomp, head reacts.
             ellipse(-36,31+math.sin(t*12)*5,32,17,"#554779")
@@ -165,7 +177,9 @@ class Mascot(QWidget):
             eye_h = 2 if .12 < t%5.1 < .24 and not self.reduced else 23
             for sign in (-1,1):
                 ellipse(sign*22-16,-52,32,eye_h,"#fff3ce")
-                ellipse(sign*22-5+math.sin(t*1.2)*4,-48,10,max(2,eye_h-5),"#172431")
+                look_x=self.pointer[0]*7 if self.follow_cursor else math.sin(t*1.2)*4
+                look_y=self.pointer[1]*3 if self.follow_cursor else 0
+                ellipse(sign*22-5+look_x,-48+look_y,10,max(2,eye_h-5),"#172431")
             p.setPen(QPen(QColor("#314233"),6,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap))
             p.drawLine(-38,-63,-9,-55 if angry else -65)
             p.drawLine(9,-55 if angry else -65,38,-63)
@@ -173,7 +187,8 @@ class Mascot(QWidget):
             ellipse(-19,-15,38,28 if angry else 9,"#33273d")
             poly([(-13,-14),(-7,-1),(-2,-14)],"#fff6df")
             poly([(3,-14),(9,-1),(15,-14)],"#fff6df")
-            arm = math.sin(t*11)*18 if angry else math.sin(t*2)*4
+            gesture={'Angry Goblin':11,'Meme Machine':18,'Motivational Coach':4,'Sarcastic Supervisor':2,'Chill Monitor':1}.get(self.personality,11)
+            arm = math.sin(t*gesture)*18*self._anger if angry else math.sin(t*2)*4
             p.setPen(QPen(QColor(skin),15,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap))
             p.drawLine(-35,2,-65,int(15-arm)); p.drawLine(35,2,65,int(15+arm))
             p.setPen(Qt.PenStyle.NoPen)
@@ -203,12 +218,14 @@ class Mascot(QWidget):
         elif self.state == "calming":
             line = LINES.get(self.personality,LINES["Angry Goblin"])[1]
         else:
-            line = "Your tiny guardian is watching."
+            line = f"{self.name} is watching."
         if not self.overlay or angry or sloth or self.state == 'calming':
             p.setBrush(QColor("#172137")); p.setPen(QPen(QColor("#465574"),1))
             p.drawRoundedRect(QRectF(10,10,370,53),14,14)
             p.setPen(QColor("#f0f3ff")); p.setFont(QFont("Segoe UI",10,QFont.Weight.DemiBold))
             p.drawText(QRectF(20,13,350,46),Qt.AlignmentFlag.AlignCenter|Qt.TextFlag.TextWordWrap,line)
+        p.setPen(QColor('#d1e7f2'));p.setFont(QFont('Segoe UI',9,QFont.Weight.DemiBold))
+        p.drawText(QRectF(50,281,290,24),Qt.AlignmentFlag.AlignCenter,self.name)
         if self._previous is not None:
             p.resetTransform(); p.setOpacity(1-blend); p.drawPixmap(self.rect(),self._previous)
         p.end()

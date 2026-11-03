@@ -9,6 +9,7 @@ from .storage import data_dir
 def main():
     parser = argparse.ArgumentParser(description="Focus Goblin desktop app")
     parser.add_argument("--demo",action="store_true",help="Start simulated signals without accessing the camera")
+    parser.add_argument('--pet-only',action='store_true',help='Show the companion with the camera off; hide dashboard')
     parser.add_argument("--self-test",metavar="REPORT",help="Verify packaged UI and MediaPipe without opening the camera; write JSON report")
     args = parser.parse_args()
     app = QApplication(sys.argv)
@@ -18,11 +19,12 @@ def main():
         QMessageBox.information(None,'Focus Goblin is already open','Open the existing dashboard or right-click your desktop goblin. Close it before starting another copy.')
         return 0
     window = MainWindow(); window.show()
+    if args.pet_only and window.overlay.isVisible() and window.tray:window.hide()
     if args.self_test:
         import json
         from pathlib import Path
         from PySide6.QtCore import QTimer
-        report = {'ui_loaded':True}
+        report = {'ui_loaded':True,'logo_loaded':not window.windowIcon().isNull(),'global_pause_registered':window.hotkey.registered,'settings_tabs':window.tabs.count()}
         try:
             import mediapipe as mp
             with mp.solutions.face_mesh.FaceMesh(refine_landmarks=True,max_num_faces=1):

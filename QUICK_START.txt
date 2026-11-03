@@ -1,22 +1,26 @@
-FOCUS GOBLIN — LOCAL WINDOWS MVP
+FOCUS GOBLIN 0.3 — LOCAL WINDOWS APPLICATION
 
 Source project on this computer:
 C:\Users\awais\OneDrive\Downloads\Computer vision program\focus-goblin
 
 Installed-source launch: double-click Launch Focus Goblin.cmd.
-Portable build: open FocusGoblin-v0.2.exe in the Windows folder build.
+Portable build: open FocusGoblin-v0.3.exe in the Windows folder build.
+Installer: FocusGoblin-Setup-0.3.0.exe (per-user installation; no admin required).
 
 The transparent desktop goblin pet appears with the camera OFF.
 Drag to move; right-click for controls. It remains visible when the dashboard is minimized.
 
 Try camera-free demo first, then Stop.
-For real monitoring: Start camera, then Calibrate while looking at the screen for 3 seconds.
+For real monitoring: Start camera, then Calibrate while looking at the screen for 5 seconds.
 
-Phone detection: Control room > Browse local YOLO model > choose
-models\yolov4-tiny.weights > Apply and save > Stop > Start camera.
-If models are absent, run download-phone-model.ps1 once.
+Phone detection is enabled automatically using the bundled YOLOX ONNX model.
+Click Check / calibrate phone and hold the whole phone in view for 8 seconds.
+Watch the phone box and confidence score. Try front/back, angles and front lighting.
+Settings > Lighting & phone has Balanced/Eco/Custom detector options and auto-light controls.
+If source model files are absent, run download-phone-model.ps1 once.
 
 Pause closes capture; Resume reopens it. Stop saves and hides the pet.
+Ctrl+Alt+P pauses/resumes from other apps (configurable in Settings).
 Escape stops monitoring when the dashboard has keyboard focus.
 Show cave brings the pet back without starting the camera.
 
@@ -24,12 +28,17 @@ All camera processing is local. No raw video is stored.
 Session data: %LOCALAPPDATA%\FocusGoblin\focus.sqlite3
 
 Preview reaction shows the pet and separate click-through screen-edge fire.
-Control room includes All edges / Sides / Bottom placement and 15-60 animation FPS.
+Settings includes name/color, cursor-follow, custom PCM WAV, personality, startup,
+screen-fire placement, blur, background motion and animation rate.
+Focus desk: enter session name/duration; type a task and press Enter to start.
+False alarm logs feedback and silences reactions for 30 seconds.
+Session archive: weekly/monthly/90-day charts, events, export, backup and selected deletion.
 
-MVP LIMIT: approximate gaze; latest short camera test achieved about 4.3 observations/sec,
+LIMIT: approximate gaze; latest short camera test achieved about 3.0 observations/sec,
 not the 12 FPS target. Real-user tracking, calibration and phone accuracy need your test.
 
 README.md explains setup, phone models, packaging, controls and limitations.
+docs\RELEASE-v0.3.md describes the current release and remaining limits.
 docs\ARCHITECTURE.md covers architecture/UI/detection/database design.
 docs\ROADMAP.md lists completed and remaining phases.
 docs\VALIDATION.md records checks and live acceptance steps.

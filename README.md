@@ -1,95 +1,99 @@
-# Focus Goblin · local desktop MVP
+# Focus Goblin 0.3.0
 
-A Windows-first Python application with webcam attention estimates, an original animated goblin desktop overlay, a sloth break reminder, and local session analytics. Version **0.2.0**. See [v0.2 release notes](docs/RELEASE-v0.2.md) for the glass dashboard, new logo, smooth transitions, independent phone worker and screen-edge fire.
+A local Windows desktop companion with webcam attention estimates, phone detection, a floating goblin, task sessions and an animated waterfall/glass dashboard.
 
-## Run on this computer
+## Launch
 
-The project is in `C:\Users\awais\OneDrive\Downloads\Computer vision program\focus-goblin`.
+Use the **FocusGoblin-Setup-0.3.0.exe** installer, or extract the complete portable folder and open **FocusGoblin-v0.3.exe**. The installer creates a Start menu shortcut and an uninstaller; startup and desktop shortcuts are optional. Camera stays off until requested.
 
-1. Double-click **Launch Focus Goblin.cmd**. Dependencies are installed in `.venv` on this computer.
-2. Try **camera-free demo** to see a repeating focus → phone/downward distraction → recovery cycle. Demo sessions are labelled and excluded from daily totals.
-3. For actual use, Stop the demo, choose **Start camera**, then **Calibrate**. Look naturally at the screen for three seconds with your eyes open. Calibration requires at least 12 face samples and rejects unstable samples.
-4. Brief glances are tolerated. Tune head/iris tolerance and warning/reaction delays in **Control room**. Higher tolerance is gentler. Paper mode allows downward work unless a phone is visible.
-5. **Pause** closes the camera and freezes session accounting. **Resume** reopens it. **Stop / Goblin off** saves the session and hides the overlay. Escape has the same stop action when the dashboard has keyboard focus.
-6. The goblin also lives on the desktop as a **transparent floating pet**, visible on launch with the camera off. It remains visible when the dashboard is minimized. Drag the cave to reposition it; right-click for controls; double-click to hide. **Show cave** restores it. Reduce motion, intensity, fire, or disable the overlay/pet in settings. Sound starts disabled.
+The source project on this computer is:
+`C:\Users\awais\OneDrive\Downloads\Computer vision program\focus-goblin`
 
-## Fresh setup
-
-Install 64-bit Python **3.11**. Python 3.14 on this computer is deliberately not used because this build pins the older MediaPipe FaceMesh API and its compatible NumPy/OpenCV versions.
+For source development, install 64-bit Python 3.11, run setup.ps1, then double-click Launch Focus Goblin.cmd or run:
 
 ```powershell
-cd 'C:\path\to\focus-goblin'
-powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1
 .\.venv\Scripts\python.exe -m focus_goblin
-# camera-free path
 .\.venv\Scripts\python.exe -m focus_goblin --demo
 ```
 
-Setup downloads dependencies. Normal use does not download models or send camera frames anywhere. The project folder can be in OneDrive; session data is stored separately under `%LOCALAPPDATA%\FocusGoblin`.
+## Fixing / testing phone detection
 
-## Phone detection
+Phone detection is now enabled by default and auto-loads the bundled **YOLOX-S ONNX** model through OpenCV. No PyTorch is needed. A score-decoding defect in the old Eco YOLOv4 adapter has also been corrected.
 
-Recommended: **YOLOv4-tiny COCO through OpenCV DNN**, no PyTorch. Its weights are about 23 MB. Run `download-phone-model.ps1` once if the `models` folder is missing. Select `models\yolov4-tiny.weights` in Control room, save, Stop and Start. Keep the matching `yolov4-tiny.cfg` beside it. The app processes phone detection every two seconds on 320×320 input, rather than every webcam frame.
+1. Stop any demo. Choose **Start camera**.
+2. Select **Check / calibrate phone**. Hold the entire phone in view for eight seconds. Try front, back, different angles and front lighting.
+3. Watch the **phone box**, detector status and class score. A reliable candidate lets Phone Check suggest a sensitivity threshold; otherwise it reports that calibration failed.
+4. Settings → Lighting & phone lets you choose Balanced YOLOX, Eco YOLOv4 or Custom. YOLOX uses 640 input; 416/608 applies to Eco only. Custom reads the selected local model path.
+5. Save and restart capture after camera/backend/lighting changes. A phone visible while you face the screen does not independently cause an alert.
 
-The model is the standard upstream general object detector, not custom trained for your desk. A phone outside the frame cannot be detected. Small, occluded, dark, or edge-on phones may be missed. Test the camera framing yourself. A visible phone alone does not cause an alert.
+The source ZIP excludes model binaries. Run download-phone-model.ps1 once if models are missing. Installer/portable deliverables include them. Runtime never downloads models. The bundled ONNX model is ~36 MB, and was downloaded from the official OpenCV Hugging Face model repository.
 
-Advanced optional alternative: install `requirements-phone.txt` and select a trusted local Ultralytics COCO `.pt` nano model. This installs the substantially heavier PyTorch stack. It is **not required** for the recommended detector. Do not load untrusted `.pt` files. Review [Ultralytics licensing](https://www.ultralytics.com/license) before distributing a build with that backend or its models. These optional dependencies are not included in the default packaged application.
+This remains imperfect: on five phone-labelled COCO128 examples, YOLOX found three matching candidates and missed two. This is a small sanity check, not a benchmark or proof that your phone will be recognized. A phone outside the camera frame cannot be detected.
 
-## What works
+## Camera, exposure and calibration
 
-- MediaPipe face and iris landmarks; relative head-direction and gaze estimates calibrated to your usual screen position.
-- Timed distraction stages, keyboard-glance grace, stable recovery, cooldowns, paper mode, separate absence/unknown accounting.
-- Requested 720p or 1080p capture; face inference and preview at 640×360; 5–20 processed frames/second selectable (12 default). The camera's actual negotiated resolution is displayed.
-- Animated original vector goblin: cave, peeking/blinking, warning, angry bouncing/stomping, running overlay, impact star, cartoon broken phone and fire; recovery returns it to its cave anchor.
-- Five personalities with different captions; optional locally generated cartoon shriek and adjustable volume. There is no recorded human scream or speech/TTS in this MVP.
-- Dark gradient/glass-look dashboard, editable RGB accent, quieter alternate finish, score ring, recent attention line, daily bars, saved sessions, CSV export.
-- SQLite events, sampled scores, periodic checkpoints, summaries, demo separation.
-- Time-based break reminders: sloth rises from a chair and stretches; monitoring pauses until resumed.
+Automatic lighting uses face-weighted gamma and local contrast on image pixels. The driver is asked to enable auto exposure when configured; acceptance/unsupported status is shown. Software cannot change the room's lighting, move a lamp, recover clipped detail or guarantee a driver's exposure behavior. Monitor brightness is not changed.
 
-## Limits and performance
+Dense face/iris points can be shown in preview. Face/gaze calibration takes five seconds and needs at least ten usable face samples. Look naturally at the screen with eyes open. Recalibrate after moving camera/seat. Ratios are smoothed, but remain approximate head/iris direction rather than screen-coordinate eye tracking.
 
-This is an attention **proxy**, not a mind-reading or medical tool. Head pose is a normalized landmark ratio, not solvePnP angles in degrees. Iris position estimates are noisy, especially with glasses, dim light, low camera angles, or eye-only movements. There is no screen-coordinate gaze mapping, emotion/laughter inference, diagnosis, or detection of which phone app is open. Recalibrate after moving the camera, changing your seat, or switching monitor layout. Calibration is local and camera-specific only by user convention; no biometric identity is created.
+Phone detection, calibration/unknown time and absence have separate states. Paper mode allows downward work without a visible phone. Short glances have a grace period; sustained away evidence escalates, with stable recovery and alert cooldowns. Smiles/laughter and thoughts are not inferred.
 
-Camera FPS and animation FPS are separate targets. YOLO now runs in its own bounded worker. The v0.2 webcam spot check negotiated 720p and achieved about **4.3 observations/sec**, with no face detected in that scene. Smooth camera operation at the 12 FPS target and real-user gaze/phone accuracy remain unverified. Pet animation targets 30 FPS independently (15–60 selectable), subject to machine load. See `docs/VALIDATION.md` and the v0.2 release notes. There is no automatic resource-based adaptation yet.
+## Sessions and interaction
 
-No global hotkey, tray/background service, startup registration, camera recording, website blocker, phone companion, custom sticker import, full desktop-wide particle field, or photorealistic sprite/voice pack is included. The transparent pet is separate from click-through 76-pixel fire strips at configurable screen edges. Effects never manipulate desktop elements. Glass panels use painted translucent layers, not compositor backdrop blur. Personality changes captions; motion/sound repertoire is shared. Daily bars cover seven calendar days. CSV export covers the newest 100 summaries. Historical samples/events remain in SQLite; the line chart shows the current session's latest 300 samples.
+- **Focus desk**: name a session, choose duration, type a task and press Enter to add it and start. Add task appends without starting. Task checkboxes persist. Countdown freezes while paused and pauses monitoring at the goal; Resume permits overtime.
+- **False alarm** records feedback and silences reactions for 30 seconds while analytics continue. Make rules gentler explicitly increases head/gaze tolerances.
+- Global pause/resume defaults to **Ctrl+Alt+P**. Alternatives/conflict reporting are in Settings. It works while other applications have focus on Windows; the app must be running.
+- Drag the desktop pet to move it. Tap to provoke a short manual reaction. Eyes follow the cursor when enabled. Right-click for dashboard, pause, break, stop and hide controls. Tray controls are available where supported.
+- Name your goblin, change its body color, select personality, motion rate/intensity, custom PCM WAV sound, RGB accent, background/motion/blur and fire placement. Custom skins were intentionally excluded.
+- Coach/Chill have gentler behavior and no screen-edge fire. Other personalities have different movement, gestures, captions and generated sounds. Custom sound replaces the generated sound.
+- The waterfall is generated scenery with animated mist; it is not a full-motion video. Glass panels blur application-owned background pixels, never the actual desktop.
 
-Breaks measure elapsed monitoring time, not actual sitting. Face absence is not automatically counted as a confirmed break. **Take a break** resets the timer and pauses capture. A long camera stall is excluded from focus, and dt is capped to avoid over-crediting unobserved time.
+Pause closes the camera. Stop saves the session, stops sound and clears pet/fire effects. Escape stops monitoring while the dashboard has focus. Break reminders use elapsed monitoring time, not a sitting-posture classifier.
 
-## Data and privacy
+## History and data
 
-`%LOCALAPPDATA%\FocusGoblin\focus.sqlite3` holds settings, coarse calibration values, timestamps, durations, scores and event labels. Raw frames exist only in memory. There is no video writer, screenshot capture, microphone capture, telemetry, cloud API, or raw-video storage option. The synthetic WAV effect is stored in the same local folder. SQLite is not encrypted. Local backups may include this folder depending on your backup settings.
+Session archive has weekly/monthly/90-day real-session charts and selected-session events. Demo data is labelled and excluded from real daily totals. Export complete JSON, CSV summaries or a SQLite backup. Selected-session deletion asks for confirmation and creates a recovery backup; active sessions are protected. Retention in days is optional (0 keeps all), applies when saved and makes a recovery backup first.
 
-To reset your history, close the app first, back up this folder if wanted, then remove `focus.sqlite3` and any accompanying `-wal`/`-shm` files. Settings/calibration are in that database too. The project never deletes your history automatically.
+Data lives in **%LOCALAPPDATA%\FocusGoblin\focus.sqlite3**. Local tasks, session names, scores, events, settings and calibration ratios are stored. Camera frames exist only in bounded memory. No raw webcam video, desktop screenshots, microphone recording, cloud inference or telemetry are stored/sent. Imported sounds and recovery backups live in the same local folder. Backups contain private session/task data. SQLite is unencrypted.
 
-## Checks and Windows packaging
+Uninstall preserves this data folder. Updates use a stable installer application ID/path. Settings can run a trusted installer you downloaded, with explicit confirmation. There is no online update server, automatic update download or code-signing certificate.
+
+## Checks, performance and build
+
+**19 automated checks passed**, as did compilation and dependency consistency checks. Native Windows checks verified global-shortcut registration/dispatch, session task storage and a nonempty frosted backdrop. The packaged application and installer have additional release checks documented in docs.
+
+The latest spot check negotiated 1280×720 with YOLOX + lighting: ~3.0 observations/sec, ~351 ms per capture/face loop, no face-positive observations in that scene, clean capture release. Real-user gaze/phone accuracy and the 12 FPS camera target remain unverified. Animation is independent (30 FPS target by default), and rendering/inference targets are not guarantees. Try Eco, lower animation FPS or disable background motion/dense dots on a slow laptop.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m compileall -q focus_goblin
 powershell -NoProfile -ExecutionPolicy Bypass -File .\package.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\installer.ps1
 ```
 
-Packaging produces a folder build: `dist\FocusGoblin-v0.2\FocusGoblin-v0.2.exe`. Keep that whole folder together. Packaging bundles the logo and MediaPipe assets. It excludes optional PyTorch/Ultralytics; the OpenCV tiny detector works with external weights. Copy `models` alongside the build and select its `.weights` file. The binary is unsigned and is a portable folder build rather than an installer.
+Installer build needs Inno Setup. Python 3.14 is deliberately not used; MediaPipe/NumPy/OpenCV are pinned for Python 3.11.
 
-## Source layout
+## Architecture
 
 ```text
 focus_goblin/
-  __main__.py       application entry
-  engine.py         settings, observations, temporal rule state machine
-  vision.py         camera/FaceMesh worker, bounded latest-frame handoff
-  phone.py          OpenCV YOLOv4-tiny inference
-  mascot.py         original procedural vector animation and overlay window
-  ui.py             dashboard, calibration, controls, charts, sound
-  storage.py        SQLite repository and CSV export
-tests/              deterministic rules, storage and Qt demo integration
-docs/               design/architecture, roadmap, validation
-packaging/entry.py   PyInstaller entry
-models/             optional downloaded external model assets
+  engine.py       temporal rules and settings
+  vision.py       camera / face worker and asynchronous phone worker
+  lighting.py     face-weighted image correction
+  phone.py        YOLOX + Eco Darknet inference / model discovery
+  ui.py           dashboard, preview, calibration, effects orchestration
+  workspace.py    sessions, task goals, feedback, preferences, history/data UI
+  windows.py      native global shortcut and opt-in startup
+  mascot.py       character rendering, cursor/tap interactions
+  visuals.py      waterfall scene and frosted native panels
+  effects.py      independent click-through screen-edge fire
+  storage.py      local SQLite, plans, backups and export
+  assets/         logo, scene and generation prompts
+tests/            rules, regressions, lighting, storage and UI checks
+packaging/        PyInstaller entry and Inno Setup installer definition
 ```
 
-See `docs/ARCHITECTURE.md` for design, detection logic and schema; `docs/ROADMAP.md` for phased implementation and remaining work. Local files have been created; nothing has been published to GitHub. The project name follows the supplied brief and is not a trademark-availability claim. The earlier angry-goblin sticker was not attached to this chat, so this build uses independently drawn vector artwork.
+See **docs/RELEASE-v0.3.md** for current feature details and limits; prior release notes are historical. Nothing has been published to GitHub. The name is the user's chosen project name, not a trademark-availability claim.
 
-Upstream references: [MediaPipe](https://github.com/google-ai-edge/mediapipe), [current Face Landmarker guide](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker/python) (newer Tasks API; this MVP pins legacy FaceMesh), [Darknet YOLOv4-tiny](https://github.com/AlexeyAB/darknet), [Qt for Python](https://doc.qt.io/qtforpython-6/). Third-party libraries/model assets retain their upstream terms; review those before public distribution.
+Third-party assets retain their upstream terms. YOLOX is from [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/object_detection_yolox); its Apache 2.0 license is included in models. [OpenCV's Region implementation](https://github.com/opencv/opencv/blob/4.x/modules/dnn/src/layers/region_layer.cpp) documents the weighted Darknet scores. Other dependencies: [MediaPipe](https://github.com/google-ai-edge/mediapipe), [Qt for Python](https://doc.qt.io/qtforpython-6/), [Inno Setup](https://jrsoftware.org/). Optional Ultralytics .pt support is untested in this build and has separate upstream licensing/dependency requirements.
