@@ -9,3 +9,10 @@ work/
 *.pt
 *.onnx
 *.log
+installer/
+*.weights
+*.spec
+.env
+.env.*
+*.pem
+*.pfx
