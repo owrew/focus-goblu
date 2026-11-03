@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Focus Goblin</title><link rel="stylesheet" href="popup.css"></head>
+<body><header><img src="icon.png" alt=""><div><h1>Focus Goblin</h1><p>One task at a time.</p></div></header>
+<main><output id="clock" aria-label="Time remaining">25:00</output><p id="status" role="status">Ready</p>
+<form id="session"><label for="task">Task</label><input id="task" maxlength="120" placeholder="What will you work on?">
+<label for="minutes">Minutes</label><input type="number" id="minutes" min="1" max="180" value="25" required>
+<div class="controls"><button id="start">Start</button><button id="pause" type="button" disabled>Pause</button><button id="reset" type="button">Reset</button></div></form></main>
+<footer><a href="https://ko-fi.com/Z3J629YD9V/" target="_blank" rel="noopener noreferrer">☕ Buy me a coffee on Ko-fi</a></footer><script src="popup.js"></script></body></html>
