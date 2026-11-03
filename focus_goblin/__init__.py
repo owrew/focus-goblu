@@ -1,2 +1,2 @@
 """Focus Goblin: local attention estimates and a theatrical desktop companion."""
-__version__ = "0.1.0"
+__version__ = "0.3.0"
