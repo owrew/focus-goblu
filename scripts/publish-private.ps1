@@ -17,7 +17,10 @@ try {
     $owner = gh api user --jq .login
     Require-Success 'GitHub authentication'
     $repository = "$owner/focus-goblin-mistwatch"
-    if (git remote) { throw 'A remote already exists. Review it before publishing.' }
+    $hasRemote = [bool](git remote)
+    if ($hasRemote -and (git remote get-url origin) -ne "https://github.com/$repository.git") {
+        throw 'The existing remote does not match the requested repository.'
+    }
     if (git status --porcelain) { throw 'Commit or review outstanding files before publishing.' }
     git fsck --full
     Require-Success 'History verification'
@@ -26,17 +29,28 @@ try {
     if ($suspicious) { throw 'Potential credential material found in commit history.' }
     $excluded = git rev-list --objects --all | Select-String ' (work/|dist/|build/|installer/|\.venv/)|\.(onnx|weights|pt|exe|sqlite3)$'
     if ($excluded) { throw 'Excluded local data or binaries are tracked in history.' }
-    gh repo create $repository --private --description 'Focus Goblin Mistwatch desktop app and browser focus timer' --source . --remote origin --push
-    Require-Success 'Private repository creation and push'
-    $remote = gh repo view $repository --json url,isPrivate,defaultBranchRef | ConvertFrom-Json
+    if ($hasRemote) {
+        $isPrivate = gh api "repos/$repository" --jq .private
+        Require-Success 'Existing repository visibility check'
+        if ($isPrivate -ne 'true') { throw 'Expected a private repository.' }
+        git push origin main
+        Require-Success 'Push'
+    } else {
+        gh repo create $repository --private --description 'Focus Goblin Mistwatch desktop app and browser focus timer' --source . --remote origin --push
+        Require-Success 'Private repository creation and push'
+    }
+    $remote = gh repo view $repository --json url,isPrivate | ConvertFrom-Json
     Require-Success 'Remote verification'
-    if (-not $remote.isPrivate -or $remote.defaultBranchRef.target.oid -ne (git rev-parse HEAD)) {
+    $remoteHead = gh api "repos/$repository/git/ref/heads/main" --jq .object.sha
+    Require-Success 'Remote branch verification'
+    if (-not $remote.isPrivate -or $remoteHead -ne (git rev-parse HEAD)) {
         throw 'Remote visibility or commit does not match.'
     }
     Write-Output $remote.url
     Write-Output "Verified private remote HEAD: $(git rev-parse HEAD)"
-    gh api "repos/$repository/commits?per_page=100" --jq '"GitHub-verified signatures: " + ([.[] | select(.commit.verification.verified)] | length | tostring) + "/" + (length | tostring)'
+    $verified = gh api "repos/$repository/commits?per_page=100" --jq '[.[] | select(.commit.verification.verified)] | length'
     Require-Success 'GitHub signature check'
+    Write-Output "GitHub-verified signatures: $verified/$(git rev-list --count HEAD)"
 } finally {
     $env:GH_TOKEN = $previousToken
 }
