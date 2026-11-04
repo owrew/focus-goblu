@@ -16,7 +16,7 @@ try {
     $env:GH_TOKEN = $passwordLine.Substring(9)
     $owner = gh api user --jq .login
     Require-Success 'GitHub authentication'
-    $repository = "$owner/focus-goblin-mistwatch"
+    $repository = "$owner/focus-goblu"
     $hasRemote = [bool](git remote)
     if ($hasRemote -and (git remote get-url origin) -ne "https://github.com/$repository.git") {
         throw 'The existing remote does not match the requested repository.'
@@ -36,7 +36,7 @@ try {
         git push origin main
         Require-Success 'Push'
     } else {
-        gh repo create $repository --private --description 'Focus Goblin Mistwatch desktop app and browser focus timer' --source . --remote origin --push
+        gh repo create $repository --private --description 'Focus Goblu desktop app and browser focus timer' --source . --remote origin --push
         Require-Success 'Private repository creation and push'
     }
     $remote = gh repo view $repository --json url,isPrivate | ConvertFrom-Json

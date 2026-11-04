@@ -1,12 +1,12 @@
-# Focus Goblin 0.4.0
+# Focus Goblu 0.4.0
 
-<img src="focus_goblin/assets/goblin-logo.png" alt="Focus Goblin mascot" width="180">
+<img src="focus_goblin/assets/goblin-logo.png" alt="Focus Goblu mascot" width="180">
 
 **Project codename: Mistwatch** · Created by **Awais Ali Rafaqat**
 
-Focus Goblin has two editions. The Windows desktop app estimates attention from local webcam input and animates a desktop pet. The Chrome and Edge companion is a browser focus timer with a task field, pause and resume, and a completion notification. The companion runs independently.
+Focus Goblu has two editions. The Windows desktop app estimates attention from local webcam input and animates a desktop pet. The Chrome and Edge companion is a browser focus timer with a task field, pause and resume, and a completion notification. The companion runs independently.
 
-<img src="docs/images/desktop-demo.png" alt="Focus Goblin observatory in camera-free demo mode" width="760">
+<img src="docs/images/desktop-demo.png" alt="Focus Goblu observatory in camera-free demo mode" width="760">
 
 | Capability | Windows desktop | Browser companion |
 | --- | --- | --- |
@@ -51,12 +51,11 @@ A local Windows desktop companion with webcam attention estimates, phone detecti
 
 ## Launch
 
-Use the **FocusGoblin-Setup-0.4.0.exe** installer, or extract the complete portable folder and open **FocusGoblin-v0.4.exe**. The installer creates a Start menu shortcut and an uninstaller; startup and desktop shortcuts are optional. Camera stays off until requested.
+Use the **FocusGoblu-Setup-0.4.0.exe** installer, or extract the complete portable folder and open **FocusGoblu-v0.4.exe**. The installer creates a Start menu shortcut and an uninstaller; startup and desktop shortcuts are optional. Camera stays off until requested.
 
-The source project on this computer is:
-`C:\Users\awais\OneDrive\Downloads\Computer vision program\focus-goblin`
+Source and development history are in the [Focus Goblu GitHub repository](https://github.com/owrew/focus-goblu).
 
-For source development, install 64-bit Python 3.11, run setup.ps1, then double-click Launch Focus Goblin.cmd or run:
+For source development, install 64-bit Python 3.11, run setup.ps1, then double-click Launch Focus Goblu.cmd or run:
 
 ```powershell
 .\.venv\Scripts\python.exe -m focus_goblin
@@ -149,7 +148,7 @@ See [v0.4 release notes](docs/RELEASE-v0.4.md) for the desktop changes and phone
 
 ## Support
 
-If you find Focus Goblin useful, you can support Awais Ali Rafaqat on Ko-fi.
+If you find Focus Goblu useful, you can support Awais Ali Rafaqat on Ko-fi.
 
 [☕ Buy me a coffee on Ko-fi](https://ko-fi.com/Z3J629YD9V/)
 
