@@ -88,6 +88,25 @@ class Store:
         count = max(1,min(366,int(count)))
         return [((today-timedelta(days=i)).isoformat(),days.get((today-timedelta(days=i)).isoformat(),0)) for i in range(count-1,-1,-1)]
 
+    def comparison(self, days, today=None):
+        today = today or datetime.now().date()
+        start = today - timedelta(days=days-1)
+        prior = start - timedelta(days=days)
+        periods = []
+        for low,high in ((start,today),(prior,start-timedelta(days=1))):
+            totals = dict.fromkeys(('focus','distracted','unknown','absent','alerts','sessions'),0)
+            for (payload,) in self.db.execute(
+                "SELECT summary FROM sessions WHERE demo=0 AND started>=? AND started<?",
+                (low.isoformat(),(high+timedelta(days=1)).isoformat()),
+            ):
+                summary = json.loads(payload)
+                for key in ('focus','distracted','unknown','absent','alerts'):
+                    totals[key] += summary.get(key,0)
+                totals['sessions'] += 1
+            totals['range'] = f'{low:%Y-%m-%d} to {high:%Y-%m-%d}'
+            periods.append(totals)
+        return periods
+
     def save_plan(self,sid,name,duration,tasks):
         self.db.execute('INSERT OR REPLACE INTO session_plans VALUES(?,?,?,?)',(sid,name,int(duration),json.dumps(tasks)))
         self.db.commit()

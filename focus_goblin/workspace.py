@@ -1,4 +1,5 @@
 """Session planning, explainability, companion preferences and data controls."""
+import html
 import json
 import shutil
 import statistics
@@ -219,18 +220,54 @@ class WorkspaceMixin:
         self.history_range.currentIndexChanged.connect(self.refresh_analytics);layout.insertWidget(1,self.history_range)
         self.analytics_chart=Chart(True);layout.insertWidget(2,self.analytics_chart)
         self.analytics_summary=QLabel();layout.insertWidget(3,self.analytics_summary)
+        layout.insertWidget(4,self.button("Generate comparison report",self.export_comparison))
         self.event_table=QTableWidget(0,3);self.event_table.setHorizontalHeaderLabels(['When','Event','Explanation'])
         self.event_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        layout.addWidget(self.event_table);self.history.itemSelectionChanged.connect(self.show_session_events)
+        layout.addWidget(self.event_table)
+        self.history.itemSelectionChanged.connect(self.show_session_events)
+        self.event_table.itemDoubleClicked.connect(self.open_session_event)
         row=QHBoxLayout()
         row.addWidget(self.button('Export all data JSON',self.export_json));row.addWidget(self.button('Back up database',self.backup_data))
         row.addWidget(self.button('Delete selected sessions',self.delete_selected));row.addWidget(self.button('Open data folder',lambda:QDesktopServices.openUrl(QUrl.fromLocalFile(str(data_dir())))))
         layout.addLayout(row);self.refresh_analytics()
 
     def refresh_analytics(self,*args):
-        days=[7,30,90][self.history_range.currentIndex()];self.analytics_chart.values=self.store.daily_range(days);self.analytics_chart.update()
-        total=sum(v for _,v in self.analytics_chart.values)
-        self.analytics_summary.setText(f'{days} days · {total/60:.1f} estimated focus minutes · demo sessions excluded')
+        days = [7,30,90][self.history_range.currentIndex()]
+        self.analytics_chart.values = self.store.daily_range(days)
+        self.analytics_chart.update()
+        current, previous = self.store.comparison(days)
+        delta = (current['focus']-previous['focus'])/60
+        self.analytics_summary.setText(
+            f"{current['focus']/60:.1f} focus min | {delta:+.1f} min vs previous {days} days | "
+            f"{current['distracted']/60:.1f} distraction min | {current['sessions']} sessions")
+
+    def export_comparison(self):
+        days = [7,30,90][self.history_range.currentIndex()]
+        path,_ = QFileDialog.getSaveFileName(self,'Save focus comparison',f'focus-{days}-day-report.html','HTML (*.html)')
+        if not path:
+            return
+        current, previous = self.store.comparison(days)
+        rows = []
+        for label,key,div in [('Estimated focus (min)','focus',60),('Likely distraction (min)','distracted',60),
+                              ('Unknown and grace (min)','unknown',60),('Absent (min)','absent',60),
+                              ('Alerts','alerts',1),('Sessions','sessions',1)]:
+            a,b = current[key]/div,previous[key]/div
+            rows.append(f'<tr><th>{html.escape(label)}</th><td>{a:g}</td><td>{b:g}</td><td>{a-b:+g}</td></tr>')
+        daily = ''.join(f'<li>{day}: {seconds/60:.1f} min</li>' for day,seconds in self.store.daily_range(days))
+        report = ('<!doctype html><html lang="en"><meta charset="utf-8"><title>Focus Goblin report</title>'
+                  '<style>body{background:#101a26;color:#eaf2f5;font:16px system-ui;max-width:760px;margin:3rem auto;padding:0 1rem}'
+                  'table{width:100%;border-collapse:collapse}th,td{padding:.7rem;text-align:left;border-bottom:1px solid #385064}'
+                  'h1,h2{color:#86dfc9}li{margin:.25rem 0}</style>'
+                  f'<h1>Focus Goblin | {days}-day comparison</h1>'
+                  f"<p>{current['range']} compared with {previous['range']}.</p>"
+                  '<p>Local session estimates grouped by start date. Demo sessions excluded. The current period includes today.</p>'
+                  '<table><thead><tr><th>Measure</th><th>Current</th><th>Previous</th><th>Change</th></tr></thead>'
+                  f"<tbody>{''.join(rows)}</tbody></table><h2>Daily estimated focus</h2><ul>{daily}</ul></html>")
+        try:
+            Path(path).write_text(report,encoding='utf-8')
+            self.notice.setText('Comparison report saved. Open the HTML file in your browser to view or print it.')
+        except OSError as exc:
+            self.notice.setText(f'Could not save report: {exc}')
 
     def show_session_events(self):
         row=self.history.currentRow()
@@ -238,6 +275,15 @@ class WorkspaceMixin:
         sid=self.history_ids[row];events=self.store.events_for(sid);self.event_table.setRowCount(len(events))
         for i,event in enumerate(events):
             for j,value in enumerate(event):self.event_table.setItem(i,j,QTableWidgetItem(str(value)))
+
+    def open_session_event(self, item):
+        detail = self.event_table.item(item.row(),2)
+        if detail:
+            dialog = QMessageBox(self)
+            dialog.setWindowTitle('Session event')
+            dialog.setTextFormat(Qt.TextFormat.PlainText)
+            dialog.setText(detail.text())
+            dialog.exec()
 
     def export_json(self):
         path,_=QFileDialog.getSaveFileName(self,'Export all analytics','focus-data.json','JSON (*.json)')
