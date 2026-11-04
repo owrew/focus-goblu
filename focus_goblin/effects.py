@@ -11,6 +11,7 @@ class FlameStrip(QWidget):
         super().__init__()
         self.edge = edge
         self.phase = 0.
+        self.delay = {'bottom':0.,'left':.17,'right':.34,'top':.52}[edge]
         self.strength = 0.
         self.reduced = False
         self.intensity = 2
@@ -35,7 +36,7 @@ class FlameStrip(QWidget):
         elif self.edge == 'right': p.translate(self.width(),0); p.rotate(90)
         width = self.height() if self.edge in ('left','right') else self.width()
         depth = self.width() if self.edge in ('left','right') else self.height()
-        t = 0 if self.reduced else self.phase
+        t = 0 if self.reduced else self.phase-self.delay
         glow = QLinearGradient(0,depth,0,0)
         glow.setColorAt(0,QColor(255,91,52,125)); glow.setColorAt(1,QColor(255,91,52,0))
         p.fillRect(QRectF(0,0,width,depth),glow)
@@ -43,7 +44,8 @@ class FlameStrip(QWidget):
         spacing = 38 if self.intensity > 1 else 66
         for i in range(int(width/spacing)+2):
             x = i*spacing
-            height = (25+23*(.5+.5*math.sin(t*3.8+i*1.7)))*(0.7+self.intensity*.13)
+            wave = .67+.33*math.sin(t*2.9-i*.31)
+            height = (24+30*(.5+.5*math.sin(t*3.8+i*1.7)))*wave*(.7+self.intensity*.13)
             sway = math.sin(t*2.7+i)*10
             path = QPainterPath(); path.moveTo(x-23,depth)
             path.cubicTo(x-34,depth-height*.35,x-4+sway,depth-height*.45,x+sway,depth-height)
@@ -52,7 +54,10 @@ class FlameStrip(QWidget):
             fill = QLinearGradient(x,depth,x,depth-height)
             fill.setColorAt(0,QColor('#ffbd5c')); fill.setColorAt(.5,QColor('#ff704f')); fill.setColorAt(1,QColor('#fc496b'))
             p.setBrush(fill); p.drawPath(path)
-            p.setBrush(QColor('#ffe4a1')); p.drawEllipse(QRectF(x-6,depth-height*.35,12,height*.5))
+            life = .4 if self.reduced else (t*.8+i*.37)%1
+            ember = QColor('#ffe4a1'); ember.setAlphaF(1-life)
+            p.setBrush(ember)
+            p.drawEllipse(QRectF(x+sway*.4,depth-height*.3-life*height,3.5,5))
         p.end()
 
 
@@ -80,7 +85,9 @@ class ScreenFire:
         now = time.monotonic(); dt = min(now-self.last,.1); self.last = now
         self.amount += (self.target-self.amount)*(1-math.exp(-dt*7))
         for w in self.windows:
-            w.phase += dt; w.strength = self.amount
+            w.phase += dt
+            ignition = 1. if w.reduced else min(1.,max(0.,(w.phase-w.delay)*4))
+            w.strength = self.amount*ignition
             if not w.isVisible(): w.show()
             w.update()
         if self.target == 0 and self.amount < .015:
