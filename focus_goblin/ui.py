@@ -40,44 +40,76 @@ class Chart(QWidget):
         self.setMouseTracking(True)
 
     def mouseMoveEvent(self,event):
-        if self.values and not self.bars:
-            index = round(max(0,min(1,(event.position().x()-35)/max(1,self.width()-53)))*(len(self.values)-1))
-            self.setToolTip(f'Estimated attention: {self.values[index]*100:.0f}% · {len(self.values)-1-index} samples ago')
+        if not self.values:
+            return
+        position = (event.position().x()-42)/max(1,self.width()-60)
+        index = min(len(self.values)-1, max(0,round(position*(len(self.values)-1))))
+        if self.bars:
+            day,seconds = self.values[index]
+            label = f"{day} | {seconds/60:.1f} estimated focus minutes"
+        else:
+            value = self.values[index]
+            label = f"Estimated attention {value:.0%}" if value is not None else "Tracking unavailable"
+        self.setToolTip(label)
 
-    def paintEvent(self, e):
-        p = QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r = self.rect().adjusted(35,15,-18,-28)
-        p.setFont(QFont("Segoe UI",8))
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = self.rect().adjusted(42,13,-18,-28)
+        p.setFont(QFont("Segoe UI",9))
+        maximum = max(60,max((seconds for _,seconds in self.values),default=0)) if self.bars else 1
         for i in range(5):
             y = r.bottom()-r.height()*i/4
-            p.setPen(QPen(QColor("#29334c"),1)); p.drawLine(QPointF(r.left(),y),QPointF(r.right(),y))
-            p.setPen(QColor("#8390ac")); p.drawText(0,int(y)+4,str(i*25) if not self.bars else "")
-        if not self.values:
-            p.setPen(QColor("#a3afc7")); p.drawText(r,Qt.AlignmentFlag.AlignCenter,"Your next session starts the story.")
+            p.setPen(QPen(QColor(120,168,185,45),1))
+            p.drawLine(QPointF(r.left(),y),QPointF(r.right(),y))
+            p.setPen(QColor("#b1c8d1"))
+            label = f"{maximum*i/240:.0f}m" if self.bars else f"{i*25}%"
+            p.drawText(2,int(y)+4,label)
+        if not self.values or (self.bars and not any(value for _,value in self.values)) or (not self.bars and all(value is None for value in self.values)):
+            p.setPen(QColor("#c4d3da"))
+            p.drawText(r,Qt.AlignmentFlag.AlignCenter,"No focus time recorded" if self.bars else "Waiting for usable tracking data")
             return
+        accent = QColor(self.accent)
         if self.bars:
-            maximum = max(max(v for _,v in self.values),60)
             slot = r.width()/len(self.values)
-            for i,(label,v) in enumerate(self.values):
-                height = v/maximum*(r.height()-20)
-                p.setPen(Qt.PenStyle.NoPen); p.setBrush(QColor(self.accent))
-                gap=min(8,slot*.18)
-                p.drawRoundedRect(QRectF(r.left()+i*slot+gap,r.bottom()-height,max(2,slot-gap*2),max(height,2)),3,3)
-                if i%max(1,math.ceil(len(self.values)/8))==0:
-                    p.setPen(QColor("#b3bdd4")); p.drawText(int(r.left()+i*slot),r.bottom()+19,label[5:])
-                    p.drawText(int(r.left()+i*slot+2),int(r.bottom()-height-5),f"{v/60:.0f}m")
+            for i,(label,value) in enumerate(self.values):
+                x = r.left()+slot*(i+.5)
+                height = value/maximum*r.height()
+                if height > 0:
+                    brush = QLinearGradient(0,r.bottom()-height,0,r.bottom())
+                    brush.setColorAt(0,accent); brush.setColorAt(1,QColor(39,108,132,120))
+                    p.setPen(Qt.PenStyle.NoPen); p.setBrush(brush)
+                    width = min(28,slot*.72)
+                    p.drawRoundedRect(QRectF(x-width/2,r.bottom()-height,width,max(1,height)),4,4)
+                if i%max(1,math.ceil(len(self.values)/7)) == 0:
+                    p.setPen(QColor("#b1c8d1"))
+                    p.drawText(QRectF(x-24,r.bottom()+6,48,19),Qt.AlignmentFlag.AlignCenter,label[5:])
         else:
-            path = QPainterPath()
-            for i,v in enumerate(self.values):
-                point = QPointF(r.left()+i*r.width()/max(1,len(self.values)-1),r.bottom()-v*r.height())
-                path.moveTo(point) if i == 0 else path.lineTo(point)
-            area = QPainterPath(path); area.lineTo(r.right(),r.bottom()); area.lineTo(r.left(),r.bottom()); area.closeSubpath()
-            shade = QLinearGradient(0,r.top(),0,r.bottom())
-            c = QColor(self.accent); c.setAlpha(65); shade.setColorAt(0,c); c.setAlpha(0); shade.setColorAt(1,c)
-            p.fillPath(area,shade)
-            p.setPen(QPen(QColor(self.accent),3,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin)); p.drawPath(path)
-            p.setPen(QColor("#8390ac")); p.drawText(r.left(),r.bottom()+20,"Recent estimated attention · up to 5 minutes")
-        p.end()
+            groups = [[]]
+            for i,value in enumerate(self.values):
+                if value is None:
+                    if groups[-1]: groups.append([])
+                else:
+                    groups[-1].append(QPointF(r.left()+i*r.width()/max(1,len(self.values)-1),r.bottom()-value*r.height()))
+            for points in groups:
+                if not points:
+                    continue
+                path = QPainterPath(points[0])
+                for a,b in zip(points,points[1:]):
+                    mid = (a.x()+b.x())/2
+                    path.cubicTo(mid,a.y(),mid,b.y(),b.x(),b.y())
+                area = QPainterPath(path)
+                area.lineTo(points[-1].x(),r.bottom()); area.lineTo(points[0].x(),r.bottom()); area.closeSubpath()
+                shade = QLinearGradient(0,r.top(),0,r.bottom())
+                tint = QColor(accent); tint.setAlpha(100); shade.setColorAt(0,tint)
+                tint.setAlpha(8); shade.setColorAt(1,tint)
+                p.fillPath(area,shade)
+                p.setPen(QPen(accent,2.3,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap))
+                p.drawPath(path)
+                p.setPen(Qt.PenStyle.NoPen); p.setBrush(accent)
+                p.drawEllipse(points[-1],3,3)
+            p.setPen(QColor("#b1c8d1"))
+            p.drawText(r.left(),r.bottom()+19,"Recent signal | gaps indicate unavailable tracking")
 
 
 class Ring(QWidget):
