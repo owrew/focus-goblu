@@ -1,4 +1,4 @@
-# Focus Goblin browser companion privacy policy
+# Focus Goblu browser companion privacy policy
 
 The browser companion keeps your task text and current timer state in local extension storage on your device. The timer uses browser alarms to schedule completion and notifications to display the completed task. Reset clears the current session. Removing the extension clears its local storage through the browser.
 

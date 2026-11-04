@@ -1,4 +1,4 @@
-# Publish the Focus Goblin browser companion
+# Publish the Focus Goblu browser companion
 
 ## Prepare and test
 

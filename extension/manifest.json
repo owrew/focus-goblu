@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Focus Goblin — Focus Timer",
-  "version": "0.1.0",
+  "name": "Focus Goblu — Focus Timer",
+  "version": "0.1.1",
   "description": "Set a task and run a local focus timer for your browser.",
   "permissions": [
     "storage",
