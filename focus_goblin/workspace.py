@@ -20,6 +20,7 @@ class WorkspaceMixin:
     def setup_features(self):
         self.silenced_until = 0.; self.phone_check = None; self.plan_complete = False
         self.last_explanation = 'No monitoring signals yet.'
+        self.last_receipt = None
         self.hotkey = GlobalPause(self,self.pause)
         self.settings.startup = startup_enabled()
         self.hotkey_status = QLabel(self.hotkey.register(self.settings.global_pause,self.settings.pause_shortcut))
@@ -35,12 +36,29 @@ class WorkspaceMixin:
             self.tray.setContextMenu(menu);self.tray.activated.connect(lambda reason:self.pet_action('dashboard') if reason==QSystemTrayIcon.ActivationReason.DoubleClick else None);self.tray.show()
         self.explanation = QLabel('Start the camera to see why an alert would trigger.')
         self.explanation.setWordWrap(True); self.explanation.setObjectName('notice')
-        self.tabs.widget(0).widget().layout().addWidget(self.explanation,5,0,1,2)
+        self.receipt = QLabel('Alert receipts will appear here after a reaction.')
+        self.receipt.setWordWrap(True); self.receipt.setTextFormat(Qt.TextFormat.PlainText)
+        self.receipt.setObjectName('notice')
+        self.alert_layout.addWidget(self.explanation)
+        self.alert_layout.addWidget(self.receipt)
         row = QHBoxLayout()
-        self.centralWidget().layout().itemAt(2).layout().addWidget(self.button('False alarm',self.false_alarm))
+        row.addWidget(self.button('False alarm',self.false_alarm))
         row.addWidget(self.button('Make rules gentler',self.gentler))
-        row.addWidget(self.button('Check / calibrate phone',self.start_phone_check))
-        self.signal_badges.parentWidget().layout().addLayout(row)
+        self.alert_layout.addLayout(row)
+        camera_layout = self.signal_badges.parentWidget().layout()
+        camera_layout.addWidget(self.button('Phone Check 2.0',self.start_phone_check))
+        self.phone_panel = QWidget()
+        controls = QVBoxLayout(self.phone_panel)
+        controls.setContentsMargins(0,0,0,0)
+        self.phone_prompt = QLabel(); self.phone_prompt.setWordWrap(True)
+        controls.addWidget(self.phone_prompt)
+        row = QHBoxLayout()
+        self.phone_next = self.button('Capture view',self.advance_phone_check)
+        row.addWidget(self.phone_next)
+        row.addWidget(self.button('Close phone check',self.cancel_phone_check))
+        controls.addLayout(row)
+        camera_layout.addWidget(self.phone_panel)
+        self.phone_panel.hide()
 
     def setup_companion_settings(self):
         index = next(i for i in range(self.tabs.count()) if self.tabs.tabText(i)=='Control room')
@@ -58,18 +76,19 @@ class WorkspaceMixin:
             w = QComboBox(); w.addItems(items); w.setCurrentText(str(getattr(self.settings,key))); self.fields[key] = w; form.addRow(label,w)
         companion = page('Your goblin')
         line(companion,'goblin_name','Companion name')
-        companion.addRow(self.button('Choose goblin body color',self.choose_body_color))
+        companion.addRow(self.button('Choose cave glow color',self.choose_body_color))
         check(companion,'cursor_follow','Follow the cursor with its eyes')
         check(companion,'poke_reaction','React angrily to a tap (drag still moves the pet)')
         self.sound_path = line(companion,'custom_sound','Custom rage sound (local PCM WAV)')
         companion.addRow(self.button('Import custom WAV',self.import_sound))
         companion.addRow(self.button('Clear custom sound',lambda: self.sound_path.clear()))
-        companion.addRow(QLabel('Personalities have different travel, gesture and generated-sound patterns.\nCustom skins are not included, as requested.'))
+        companion.addRow(QLabel('Personalities have different movement, expressions and sounds.\nThe cave glow color complements the anime artwork.'))
         companion.addRow(self.button('Apply all settings',self.save_settings,True))
         camera = page('Lighting & phone')
         check(camera,'phone_enabled','Enable visible-phone detection (auto-load bundled model)')
         combo(camera,'phone_backend','Detector',['Balanced YOLOX','Eco YOLOv4','Custom'])
         combo(camera,'phone_size','Eco YOLOv4 input (YOLOX uses 640)',['416','608'])
+        check(camera,'handheld_context','Match nearby hands and supported objects to your look direction')
         check(camera,'auto_light','Automatic face-weighted brightness / local contrast')
         check(camera,'camera_auto_exposure','Ask webcam driver to enable auto exposure on next start')
         w = QSpinBox(); w.setRange(70,180); w.setValue(self.settings.face_brightness); self.fields['face_brightness']=w
@@ -163,21 +182,8 @@ class WorkspaceMixin:
 
     def update_workspace(self,decision):
         if not hasattr(self,'explanation'):return
-        self.last_explanation=f'{decision.reason} · away evidence {self.engine.away:.1f}s / {self.settings.alert_seconds:.1f}s · phone score {self.observation.phone_score:.0%}'
+        self.last_explanation = f'{decision.reason} | {self.engine.away:.1f}s away / {self.settings.alert_seconds:g}s to react'
         self.explanation.setText(self.last_explanation)
-        if self.phone_check:
-            began,scores=self.phone_check
-            scores.append(self.observation.phone_score)
-            if time.monotonic()-began >= 8:
-                useful=[score for score in scores if score>=.15]
-                if useful:
-                    threshold=max(.15,min(.5,statistics.median(useful)*.65))
-                    self.fields['phone_confidence'].setValue(threshold);self.settings.phone_confidence=threshold
-                    self.store.save_settings(self.settings)
-                    if self.worker:self.worker.settings.phone_confidence=threshold
-                    self.notice.setText(f'Phone check found a phone candidate. Threshold set to {threshold:.0%}. This tunes sensitivity; it does not retrain the model.')
-                else:self.notice.setText('Phone check found no reliable candidate. Use Balanced YOLOX, move the entire phone into view, improve front lighting, or change its angle. No successful calibration was recorded.')
-                self.phone_check=None
         target=self.session_length.value()*60; remaining=max(0,target-self.engine.active)
         done=sum(t['done'] for t in self.tasks()); total=self.task_list.count()
         self.session_clock.setText(f'{self.session_title.text()} · {int(remaining)//60:02d}:{int(remaining)%60:02d} remaining · tasks {done}/{total}')
@@ -188,7 +194,7 @@ class WorkspaceMixin:
 
     def false_alarm(self):
         if not self.sid:self.notice.setText('Start a session before marking a false alarm.');return
-        self.store.event(self.sid,'false_alarm',self.last_explanation)
+        self.store.event(self.sid,'false_alarm',self.last_receipt or self.last_explanation)
         self.engine.dismiss_alert();self.silenced_until=time.monotonic()+30;self.preview_until=0;self.screen_fire.clear()
         if hasattr(self,'sound_effect'):self.sound_effect.stop()
         self.notice.setText('Marked as a false alarm. Reactions silenced for 30 seconds; measured analytics continue. Tune tolerances or use Make rules gentler.')
@@ -199,18 +205,98 @@ class WorkspaceMixin:
         self.engine.settings=self.settings;self.store.save_settings(self.settings)
         self.notice.setText('Head and gaze tolerances increased by 15%. Other rules are unchanged.')
 
+    phone_views = ('Front / screen', 'Back / case', 'Angled / edge')
+
     def start_phone_check(self):
-        if self.demo and self.sid:self.notice.setText('Stop demo first to check a real phone.');return
-        self.settings.phone_enabled=True;self.fields['phone_enabled'].setChecked(True)
-        self.settings.phone_confidence=.25;self.fields['phone_confidence'].setValue(.25)
-        if not self.sid:self.start_camera()
-        elif self.paused:self.pause()
-        elif self.worker and not self.worker.settings.phone_enabled:
-            self.notice.setText('Phone detection was off. Stop and start the camera, then run Phone check.');return
+        if self.demo and self.sid:
+            self.notice.setText('Stop demo before checking your phone.')
+            return
+        enabled = self.worker.settings.phone_enabled if self.busy() else self.settings.phone_enabled
+        if not enabled:
+            self.notice.setText('Enable phone detection in Settings and restart camera capture.')
+            return
         if self.sid is None:
-            self.notice.setText('Camera is still closing. Wait a moment and run Phone Check again.');return
-        self.phone_check=(time.monotonic(),[])
-        self.notice.setText('Phone check: hold the whole phone in view for 8 seconds; try both front and back. Watch the phone box and score. No frames are saved.')
+            self.start_camera()
+        elif self.paused:
+            self.pause()
+        if self.sid is None or self.paused:
+            self.notice.setText('Wait for the camera to finish closing, then run Phone Check again.')
+            return
+        self.tabs.setCurrentIndex(0)
+        self.phone_check = {'views': [], 'scores': {}, 'deadline': 0., 'start': 0., 'suggestion': None}
+        self.engine.away = self.engine.stable = self.engine.streak = 0.
+        self.preview_until = 0.
+        self.screen_fire.clear()
+        if hasattr(self,'sound_effect'):
+            self.sound_effect.stop()
+        self.phone_panel.show()
+        self.phone_next.setEnabled(True)
+        self.phone_next.setText('Capture view')
+        self.phone_prompt.setText('Front / screen. Hold the entire phone in frame at your usual desk distance, then select Capture view.')
+
+    def cancel_phone_check(self):
+        self.phone_check = None
+        if self.worker:
+            self.worker.phone_calibrating = False
+        self.phone_panel.hide()
+        self.last_tick = time.monotonic()
+
+    def advance_phone_check(self):
+        check = self.phone_check
+        if not check or check['deadline']:
+            return
+        if len(check['views']) == len(self.phone_views):
+            threshold = check['suggestion']
+            if threshold is not None:
+                self.fields['phone_confidence'].setValue(threshold)
+                self.settings.phone_confidence = threshold
+                self.engine.settings.phone_confidence = threshold
+                self.store.save_settings(self.settings)
+                if self.busy():
+                    self.worker.phone_confidence = threshold
+                self.notice.setText(f'Phone sensitivity saved at {threshold:.0%}.')
+            self.cancel_phone_check()
+            return
+        check['scores'] = {}
+        if self.worker:
+            self.worker.phone_calibrating = True
+        check['start'] = time.monotonic()
+        check['deadline'] = check['start']+6
+        self.phone_next.setEnabled(False)
+
+    def update_phone_check(self, observation, now):
+        check = self.phone_check
+        if not check or not check['deadline']:
+            return
+        if observation and observation.phone_check_result and observation.phone_stamp >= check['start']:
+            check['scores'][observation.phone_stamp] = observation.phone_score
+        view = self.phone_views[len(check['views'])]
+        remaining = max(0,check['deadline']-now)
+        if remaining:
+            self.phone_prompt.setText(f'{view} | Hold steady for {remaining:.0f}s.')
+            return
+        scores = list(check['scores'].values())
+        hits = [score for score in scores if score >= .15]
+        consistent = len(scores) >= 3 and len(hits)/len(scores) >= .6
+        verdict = ('Consistent candidate' if consistent else 'Intermittent candidate' if hits else
+                   'No candidate' if scores else 'No detector results')
+        check['views'].append((f'{view}: {verdict} ({len(hits)}/{len(scores)}, best {max(scores,default=0):.0%})',
+                               hits if consistent else []))
+        check['deadline'] = 0.
+        self.phone_next.setEnabled(True)
+        results = '\n'.join(result for result,_ in check['views'])
+        if len(check['views']) < len(self.phone_views):
+            self.phone_prompt.setText(results+'\nNext: '+self.phone_views[len(check['views'])]+'. Reposition the phone and capture.')
+            return
+        medians = [statistics.median(hits) for _,hits in check['views'] if hits]
+        if medians:
+            check['suggestion'] = round(max(.15,min(.50,min(medians)*.75)),2)
+            self.phone_next.setText(f"Apply {check['suggestion']:.0%} sensitivity")
+            results += '\nReview each view before applying the suggested threshold.'
+        else:
+            self.phone_next.setEnabled(False)
+            results += '\nTry better front lighting, a closer view, or another detector.'
+        self.phone_prompt.setText(results)
 
     def setup_history_analytics(self):
         from .ui import Chart

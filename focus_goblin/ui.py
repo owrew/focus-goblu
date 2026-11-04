@@ -150,6 +150,11 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         self.paused = False
         self.closing = False
         self.last_frame = self.last_tick = time.monotonic()
+        self.frame_times = deque(maxlen=24)
+        self.sleep_until = 0.
+        self.nap_started = 0.
+        self.next_snore = 0.
+        self.wake_until = 0.
         self.last_sample = 0
         self.last_state = "ready"
         self.samples = deque(maxlen=300)
@@ -194,7 +199,7 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         top.addWidget(logo)
         brand = QLabel("Focus Goblin"); brand.setObjectName("brand")
         top.addWidget(brand); top.addStretch()
-        local = QLabel("Local companion  /  v0.3"); local.setObjectName('muted'); top.addWidget(local)
+        local = QLabel("Local companion  /  v0.4"); local.setObjectName('muted'); top.addWidget(local)
         self.camera_status = QLabel("● Camera off · local processing")
         top.addWidget(self.camera_status); layout.addLayout(top)
         sub = QLabel("Your focus has a guardian. Give it something worth guarding.")
@@ -214,10 +219,10 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         support.setOpenExternalLinks(True)
         support.setAlignment(Qt.AlignmentFlag.AlignRight)
         layout.addWidget(support)
-        page = QWidget(); page.setMinimumHeight(780)
+        page = QWidget()
         observatory = QScrollArea(); observatory.setWidgetResizable(True); observatory.setWidget(page)
-        self.tabs.addTab(observatory,"Observatory")
-        grid = QGridLayout(page); grid.setSpacing(14)
+        self.tabs.addTab(observatory,"Today")
+        grid = QGridLayout(page); grid.setContentsMargins(1,5,9,9); grid.setSpacing(12)
         self.metrics = {}
         row = QHBoxLayout()
         for key,title in [("focus","Estimated focus"),("distracted","Likely distraction"),("longest","Longest streak"),("alerts","Goblin alerts")]:
@@ -225,40 +230,45 @@ class MainWindow(WorkspaceMixin,QMainWindow):
             value = QLabel("00:00" if key != "alerts" else "0"); value.setObjectName("metric")
             inner.addWidget(value); self.metrics[key] = value; row.addWidget(card)
         grid.addLayout(row,0,0,1,2)
-        live,inner = self.panel("Local camera / attention signals")
+        live,inner = self.panel("Camera health")
         self.preview = CameraPreview("Camera off\nStart a session to see your local preview.")
-        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter); self.preview.setMinimumSize(400,210)
+        self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter); self.preview.setMinimumSize(325,176)
         self.preview.setObjectName("preview"); inner.addWidget(self.preview,1)
         self.signals = QLabel("Head and iris estimates appear after calibration."); self.signals.setWordWrap(True)
-        inner.addWidget(self.signals); grid.addWidget(live,1,0)
+        inner.addWidget(self.signals); grid.addWidget(live,3,0)
         self.signal_badges = QLabel('Face —     Phone —     Camera off')
-        self.signal_badges.setObjectName('signalBadges'); inner.addWidget(self.signal_badges)
+        self.signal_badges.setObjectName('signalBadges'); self.signal_badges.setWordWrap(True); inner.addWidget(self.signal_badges)
+        self.camera_health = QLabel("Camera off. Start the camera to check resolution, speed and lighting.")
+        self.camera_health.setWordWrap(True); self.camera_health.setObjectName("muted"); inner.addWidget(self.camera_health)
         creature,inner = self.panel("The cave")
         line = QHBoxLayout()
-        self.mascot = Mascot(); self.mascot.setMinimumSize(260,240); line.addWidget(self.mascot,1)
-        right = QVBoxLayout(); self.ring = Ring(); right.addWidget(self.ring)
+        self.mascot = Mascot(); self.mascot.setMinimumSize(215,190); line.addWidget(self.mascot,1)
+        right = QVBoxLayout(); right.addStretch(); self.ring = Ring(); right.addWidget(self.ring); right.addStretch()
         self.state_label = QLabel("Ready"); self.state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         right.addWidget(self.state_label); line.addLayout(right); inner.addLayout(line)
-        actions = QHBoxLayout()
-        actions.addWidget(self.button("Preview reaction",self.preview_reaction))
-        actions.addWidget(self.button("Show cave",self.show_overlay))
-        actions.addWidget(self.button("Take a break",self.take_break))
-        inner.addLayout(actions); grid.addWidget(creature,1,1)
+        actions = QGridLayout()
+        actions.addWidget(self.button("Preview reaction",self.preview_reaction),0,0)
+        actions.addWidget(self.button("Sleep the goblin",self.sleep_goblin),0,1)
+        actions.addWidget(self.button("Show pet",self.show_overlay),1,0)
+        actions.addWidget(self.button("Take a break",self.take_break),1,1)
+        inner.addLayout(actions); grid.addWidget(creature,2,1)
         mission,mission_inner = self.panel('Session rhythm')
         rhythm = QHBoxLayout()
         self.goal_label = QLabel('Daily goal · 0 / 60 min'); rhythm.addWidget(self.goal_label)
         self.goal_progress = QProgressBar(); self.goal_progress.setRange(0,100); self.goal_progress.setTextVisible(False); rhythm.addWidget(self.goal_progress,2)
         self.break_label = QLabel('Next stretch · 30 min'); rhythm.addWidget(self.break_label)
         self.break_progress = QProgressBar(); self.break_progress.setRange(0,100); self.break_progress.setTextVisible(False); rhythm.addWidget(self.break_progress,1)
-        mission_inner.addLayout(rhythm); grid.addWidget(mission,2,0,1,2)
+        mission_inner.addLayout(rhythm); grid.addWidget(mission,1,0,1,2)
         chart,inner = self.panel("Attention signal")
-        self.chart = Chart(); inner.addWidget(self.chart); grid.addWidget(chart,3,0)
+        self.chart = Chart(); inner.addWidget(self.chart); grid.addWidget(chart,2,0)
         week,inner = self.panel("Daily focus · real sessions only")
-        self.week = Chart(True); inner.addWidget(self.week); grid.addWidget(week,3,1)
+        self.week = Chart(True); inner.addWidget(self.week); grid.addWidget(week,4,0,1,2)
+        receipts,self.alert_layout = self.panel("Why the goblin reacted")
+        grid.addWidget(receipts,3,1)
         self.footer = QLabel("Break timer 00:00 · Face absence and uncalibrated time are excluded from focus.")
-        self.footer.setWordWrap(True); grid.addWidget(self.footer,4,0,1,2)
-        grid.setColumnStretch(0,1); grid.setColumnStretch(1,1)
-        grid.setRowStretch(1,2); grid.setRowStretch(3,1)
+        self.footer.setWordWrap(True); grid.addWidget(self.footer,5,0,1,2)
+        grid.setColumnStretch(0,6); grid.setColumnStretch(1,5)
+        grid.setRowStretch(2,1)
         self.build_settings()
         history = QWidget(); h = QVBoxLayout(history)
         h.addWidget(QLabel("Saved session summaries · demo sessions are labelled and excluded from daily focus."))
@@ -306,8 +316,8 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         spin("camera","Camera index",0,9)
         combo("resolution","Requested capture resolution",["1280x720","1920x1080"])
         spin("fps","Processing frames per second",5,20)
-        spin("warning_seconds","Warning after (seconds)",1,60,1,True)
-        spin("alert_seconds","Reaction after (seconds)",2,120,1,True)
+        spin("warning_seconds","Warning after (seconds)",1,299,1,True)
+        spin("alert_seconds","Reaction after (seconds, up to 5 minutes)",2,300,1,True)
         spin("cooldown_seconds","Repeat alert cooldown (seconds)",1,300,1,True)
         spin("head_tolerance","Head direction tolerance (higher = gentler)",.03,.8,.01,True)
         spin("gaze_tolerance","Iris tolerance (higher = gentler)",.03,1.,.01,True)
@@ -350,6 +360,8 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         self.store.save_settings(self.settings); self.apply_theme()
         self.screen_fire.clear()
         self.update_scene()
+        for key in ('warning_seconds','alert_seconds'):
+            self.fields[key].setValue(getattr(self.settings,key))
         self.notice.setText("Settings saved. Camera/model changes apply after Stop and Start. Calibrate after moving the camera.")
         if not self.settings.overlay: self.overlay.hide()
         from .windows import set_startup
@@ -370,7 +382,7 @@ class MainWindow(WorkspaceMixin,QMainWindow):
             QFrame#panel QLabel, QFrame#panel QWidget {{ background:transparent; }}
             QLabel#brand {{ font-size:30px; font-weight:750; color:#eff9ff; }}
             QLabel#metric {{ font-size:29px; font-weight:700; }}
-            QLabel#sectionTitle {{ font-size:14px; color:#bdc9e5; font-weight:600; }}
+            QLabel#sectionTitle {{ font-size:14px; color:#d4e7ec; font-weight:650; }}
             QLabel#muted {{ color:#94a5c7; }}
             QLabel#notice {{ background:rgba(39,64,88,150); border:1px solid #385771; border-left:3px solid {accent}; padding:10px; border-radius:9px; }}
             QLabel#signalBadges {{ color:{accent}; background:rgba(26,67,75,90); border-radius:7px; padding:7px; }}
@@ -382,7 +394,7 @@ class MainWindow(WorkspaceMixin,QMainWindow):
             QPushButton#primary {{ background:{accent}; color:#0d1420; font-weight:700; }}
             QPushButton#primary:disabled {{ background:#234b50; color:#7fa3ab; border-color:#365d67; }}
             QTabWidget::pane {{ border:0; }}
-            QTabBar::tab {{ background:rgba(25,39,62,180); padding:12px 23px; margin-right:6px; border-top-left-radius:10px; border-top-right-radius:10px; border-bottom:2px solid transparent; }}
+            QTabBar::tab {{ background:rgba(25,39,62,180); padding:9px 20px; margin-right:6px; border-radius:10px; border-bottom:2px solid transparent; }}
             QTabBar::tab:selected {{ background:rgba(58,81,112,190); color:{accent}; border-bottom:2px solid {accent}; }}
             QSpinBox,QDoubleSpinBox,QComboBox,QLineEdit {{ padding:7px; background:#202b43; border:1px solid #455674; border-radius:5px; }}
             QTableWidget {{ background:rgba(12,26,43,230);gridline-color:#34405c;alternate-background-color:#1c263c;border-radius:10px; }}
@@ -394,7 +406,7 @@ class MainWindow(WorkspaceMixin,QMainWindow):
             QProgressBar {{ background:#111e31; border:1px solid #3d536e; border-radius:5px; max-height:10px; min-height:10px; }}
             QProgressBar::chunk {{ background:{accent}; border-radius:4px; }}
         """)
-        self.chart.accent = self.week.accent = self.ring.accent = accent
+        self.chart.accent = self.week.accent = self.analytics_chart.accent = self.ring.accent = accent
         self.ring.reduced = self.settings.reduced_motion
         for m in (self.mascot,self.overlay):
             m.personality = self.settings.personality; m.reduced = self.settings.reduced_motion
@@ -418,13 +430,19 @@ class MainWindow(WorkspaceMixin,QMainWindow):
 
     def start_worker(self):
         self.observation = Observation(valid=False)
+        self.frame_times.clear()
+        self.camera_health.setText("Opening camera and loading local models.")
         self.worker = VisionWorker(copy.deepcopy(self.settings))
         self.worker.status.connect(self.worker_status)
         self.worker.start(); self.last_frame = time.monotonic()
         self.camera_status.setText("● Camera opening…")
 
     def worker_status(self,text):
-        self.camera_status.setText(text)
+        if text.startswith("Phone detector"):
+            self.notice.setText(text)
+            return
+        self.camera_status.setText(text.split(" | ")[0])
+        self.camera_health.setText(text)
         if "error" in text.lower() or "unavailable" in text.lower() or "disabled" in text.lower(): self.notice.setText(text)
 
     def begin(self,demo):
@@ -433,6 +451,8 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         self.engine = AttentionEngine(copy.deepcopy(self.settings))
         if demo: self.engine.settings.calibrated = True
         self.sid = self.store.start(self.settings.mode,demo)
+        self.last_receipt = None
+        self.receipt.setText("Alert receipts will appear here after a reaction.")
         self.samples.clear(); self.last_sample = 0; self.last_state = "ready"
         self.last_tick = time.monotonic(); self.pause_button.setText("Pause")
         self.plan_started()
@@ -443,6 +463,7 @@ class MainWindow(WorkspaceMixin,QMainWindow):
     def start_demo(self):
         if self.sid is not None or self.busy(): return
         self.begin(True); self.camera_status.setText("● Camera off · DEMO signals")
+        self.camera_health.setText("Camera off. This session uses simulated signals.")
         self.preview.setText("DEMO / no camera\nCycle: focused → looking down + phone → refocus")
 
     def pause(self):
@@ -451,7 +472,8 @@ class MainWindow(WorkspaceMixin,QMainWindow):
             self.paused = True
             if self.worker: self.worker.stop()
             self.preview.clear(); self.preview.setText("Paused · camera closing")
-            self.overlay.hide(); self.calibration = None;self.phone_check=None
+            self.overlay.hide(); self.calibration = None; self.cancel_phone_check()
+            self.camera_health.setText("Monitoring paused. Camera closing.")
             self.screen_fire.clear(); self.preview_until = 0.
             if hasattr(self,'sound_effect'): self.sound_effect.stop()
             self.engine.take_break()
@@ -468,7 +490,9 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         if self.sid is not None:
             self.store.checkpoint(self.sid,self.engine.summary(),True)
             self.sid = None
-        self.paused = False; self.calibration = None;self.phone_check=None
+        self.paused = False; self.calibration = None; self.cancel_phone_check()
+        self.sleep_until = self.wake_until = 0.
+        self.camera_health.setText("Camera off / closing.")
         self.preview.clear(); self.preview.setText("Camera off / closing\nNo images are recorded.")
         self.preview.setProperty('demo',False)
         self.overlay.hide(); self.mascot.state = "ready"
@@ -494,9 +518,36 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         elif action == 'break': self.take_break()
         elif action == 'stop': self.stop()
         elif action == 'hide': self.overlay.hide()
+        elif action == 'sleep': self.sleep_goblin()
+        elif action == 'wave': self.greet_pet()
         elif action == 'poke' and self.settings.poke_reaction:self.preview_reaction()
 
+    def sleep_goblin(self):
+        now = time.monotonic()
+        if now < self.sleep_until:
+            return
+        self.nap_started = now
+        self.next_snore = now+2.5
+        if self.sid:
+            self.store.event(self.sid,"pet_nap","Three-minute reaction mute; tracking continues")
+        self.sleep_until = now+180
+        self.wake_until = 0.
+        self.preview_until = 0.
+        self.screen_fire.clear()
+        if hasattr(self,'sound_effect'):
+            self.sound_effect.stop()
+        self.show_overlay()
+        self.update_scene()
+        self.notice.setText("The goblin is taking a three-minute nap. Session tracking continues.")
+
+    def greet_pet(self):
+        if time.monotonic() >= self.sleep_until:
+            for pet in (self.mascot,self.overlay):
+                pet.greet_until = time.monotonic()+2
+
     def preview_reaction(self):
+        if time.monotonic() < self.sleep_until:
+            return
         self.preview_until = time.monotonic()+4
         self.update_scene(); self.show_overlay()
         self.shriek()
@@ -506,23 +557,70 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         self.update_scene()
 
     def update_scene(self):
-        state = 'angry' if time.monotonic() < self.preview_until else self.engine.state if self.sid and not self.paused else 'ready'
-        if time.monotonic()<getattr(self,'silenced_until',0):state='calming'
-        self.mascot.state = self.overlay.state = state
-        self.screen_fire.configure(state == 'angry' and self.settings.personality not in ('Chill Monitor','Motivational Coach'),self.settings)
+        now = time.monotonic()
+        if self.sleep_until and now >= self.sleep_until:
+            self.sleep_until = 0.
+            self.wake_until = now+2.
+            self.engine.away = self.engine.stable = 0.
+            self.engine.state = 'ready'
+            if self.sid:
+                self.store.event(self.sid,"pet_wake","Goblin nap completed")
+        state = 'angry' if now < self.preview_until else self.engine.state if self.sid and not self.paused else 'ready'
+        if now < getattr(self,'silenced_until',0.): state = 'calming'
+        if self.phone_check: state = 'ready'
+        if self.sleep_until:
+            state = 'drink' if now-self.nap_started < 1.5 else 'sleep'
+            if state == 'sleep' and self.overlay.isVisible() and now >= self.next_snore:
+                self.next_snore = now+9
+                self.play_pet_sound(snore=True)
+        elif now < self.wake_until:
+            state = 'wake'
+        for pet in (self.mascot,self.overlay):
+            pet.nap_remaining = max(0,self.sleep_until-now)
+            pet.state = state
+        allow_fire = state == 'angry' and self.settings.personality in ('Angry Goblin','Sarcastic Supervisor')
+        self.screen_fire.configure(allow_fire,self.settings)
+
+    def update_camera_health(self, obs, stamp, latency):
+        self.frame_times.append(stamp)
+        elapsed = stamp-self.frame_times[0]
+        rate = (len(self.frame_times)-1)/elapsed if elapsed > 0 else 0
+        width,height = obs.frame_size
+        if not obs.face:
+            guidance = "Face out of view or obscured"
+        elif obs.backlight > 45:
+            guidance = "Bright background. Try a light facing you."
+        elif obs.light_level < 60:
+            guidance = "Face is dark. Add front lighting."
+        elif obs.light_level > 210:
+            guidance = "Face is very bright. Reduce direct light."
+        else:
+            guidance = "Face visible and lighting usable"
+        speed = f"{rate:.1f} obs/s" if len(self.frame_times)>1 else "measuring speed"
+        phone = "result ready" if obs.phone_stamp else obs.phone_status
+        self.camera_health.setText(f"{width}x{height} capture | {speed} | {latency*1000:.0f} ms\n{guidance}\nPhone: {phone}")
 
     def take_break(self):
         if self.sid:
             self.engine.take_break(); self.store.event(self.sid,"break","User requested break")
             if not self.paused: self.pause()
-        self.mascot.state = self.overlay.state = "break"; self.show_overlay()
+        self.show_overlay()
+        if self.sleep_until:
+            self.update_scene()
+        else:
+            self.mascot.state = self.overlay.state = "break"
         self.screen_fire.clear()
         self.notice.setText("Break time. Monitoring is paused. Stand, stretch, walk; press Resume when ready.")
 
     def shriek(self):
+        self.play_pet_sound()
+
+    def play_pet_sound(self, snore=False):
         if not self.settings.sound: return
         custom=Path(self.settings.custom_sound)
         path = custom if self.settings.custom_sound and custom.is_file() else data_dir()/f"goblin-{self.settings.personality.replace(' ','-')}.wav"
+        if snore:
+            path = data_dir()/"goblin-snore.wav"
         if not path.exists():
             with wave.open(str(path),"wb") as w:
                 w.setnchannels(1); w.setsampwidth(2); w.setframerate(22050)
@@ -530,8 +628,13 @@ class MainWindow(WorkspaceMixin,QMainWindow):
                 for i in range(14000):
                     t = i/22050
                     base={'Angry Goblin':370,'Meme Machine':510,'Motivational Coach':270,'Sarcastic Supervisor':310,'Chill Monitor':190}.get(self.settings.personality,370)
-                    value = math.sin(2*math.pi*(base*t+85*t*t)+1.4*math.sin(2*math.pi*26*t))
-                    audio.extend(struct.pack("<h",int(9500*math.sin(math.pi*i/14000)*value)))
+                    if snore:
+                        value = math.sin(2*math.pi*(75*t-10*t*t)+.6*math.sin(2*math.pi*32*t))
+                        amplitude = 4300
+                    else:
+                        value = math.sin(2*math.pi*(base*t+85*t*t)+1.4*math.sin(2*math.pi*26*t))
+                        amplitude = 9500
+                    audio.extend(struct.pack("<h",int(amplitude*math.sin(math.pi*i/14000)*value)))
                 w.writeframes(audio)
         if not hasattr(self,"sound_effect"):self.sound_effect = QSoundEffect(self)
         url=QUrl.fromLocalFile(str(path))
@@ -542,23 +645,30 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         now = time.monotonic(); dt = min(now-self.last_tick,.5); self.last_tick = now
         if self.worker and not self.worker.isRunning():
             self.worker.wait(); self.worker = None
+            self.camera_health.setText("Camera off.")
             if self.paused: self.camera_status.setText("● Camera off · paused")
             elif self.sid is None: self.camera_status.setText("● Camera off")
             elif not self.demo:
                 self.camera_status.setText("● Camera off · worker stopped")
                 self.notice.setText("Camera stopped. Stop this session, check permissions and camera index, then restart.")
-        if self.sid is None or self.paused: return
+        if self.sid is None or self.paused:
+            if self.sleep_until or self.wake_until:
+                self.update_scene()
+                if now >= self.wake_until:
+                    self.wake_until = 0.
+            return
         obs = None
         if self.demo:
             cycle = self.engine.active%25
             by,bp,gx,gy = self.engine.settings.baseline
             obs = Observation(True,by,bp+(.4 if 6<cycle<18 else 0),gx,gy,True,6<cycle<18)
-            obs.phone_score=.8 if obs.phone else 0.;obs.phone_status='simulated';obs.light_level=128.
+            obs.phone_score=.8 if obs.phone else 0.;obs.phone_status='simulated';obs.light_level=128.; obs.phone_aligned=obs.phone
         elif self.worker:
             result = self.worker.take()
             if result:
                 obs,image,stamp,latency = result
                 self.last_frame = stamp
+                self.update_camera_health(obs,stamp,latency)
                 self.preview.setPixmap(QPixmap.fromImage(image).scaled(self.preview.size(),Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation))
                 self.signals.setText(f"Head ratios {obs.yaw:+.2f} / {obs.pitch:+.2f} · Iris {obs.gaze_x:.2f} / {obs.gaze_y:.2f}\n"
                     f"Phone {obs.phone_status} · score {obs.phone_score:.0%} · face light {obs.light_level:.0f}/255 · gamma {obs.light_gain:.2f}\nProcessing {latency*1000:.0f} ms")
@@ -570,6 +680,7 @@ class MainWindow(WorkspaceMixin,QMainWindow):
                             baseline = tuple(statistics.median(p[i] for p in points) for i in range(4))
                             spread = max(statistics.pstdev(p[i] for p in points) for i in range(4))
                             if spread < .16:
+                                self.worker.baseline = baseline
                                 self.settings.baseline = baseline; self.settings.calibrated = True
                                 self.engine.settings.baseline = baseline; self.engine.settings.calibrated = True
                                 self.store.save_settings(self.settings)
@@ -578,10 +689,17 @@ class MainWindow(WorkspaceMixin,QMainWindow):
                         else: self.notice.setText("Not enough clear face samples. Improve lighting and try calibration again.")
                         self.calibration = None
         if obs is not None: self.observation = obs
-        if not self.demo and now-self.last_frame > 1:
+        if not self.demo and now-self.last_frame > (1 if self.frame_times else 8):
             self.observation = Observation(valid=False)
             self.preview.clear(); self.preview.setText("Camera signal unavailable")
-        decision = self.engine.step(self.observation,dt)
+            self.camera_health.setText("Camera signal unavailable. Check the camera indicator above.")
+        if self.phone_check:
+            self.update_phone_check(obs,now)
+            self.update_scene()
+            return
+        if self.sleep_until and now >= self.sleep_until:
+            self.update_scene()
+        decision = self.engine.step(self.observation,dt,reactions=not self.sleep_until and now>=self.wake_until)
         self.update_scene()
         self.state_label.setText(decision.state.capitalize()+"\nEstimated attention")
         self.ring.value = decision.confidence; self.ring.update()
@@ -593,10 +711,17 @@ class MainWindow(WorkspaceMixin,QMainWindow):
         if decision.state != self.last_state:
             self.store.event(self.sid,"state",decision.state+": "+decision.reason); self.last_state = decision.state
         if decision.alert and now>=self.silenced_until:
-            self.store.event(self.sid,"alert",self.settings.personality); self.shriek(); self.show_overlay()
-            self.notice.setText(f'{self.settings.goblin_name}: {decision.reason}. Away evidence {self.engine.away:.1f}s; phone confidence {self.observation.phone_score:.0%}. Use False alarm if this is expected work.')
+            score = (self.observation.phone_score if decision.evidence and self.observation.phone_aligned
+                     else self.observation.object_score if decision.evidence else 0)
+            evidence = f" | detector score {score:.0%}" if score else ""
+            self.last_receipt = (f"{self.settings.personality} | {decision.reason} | "
+                                 f"{self.engine.away:.1f}s away / {self.engine.settings.alert_seconds:g}s threshold{evidence}")
+            self.receipt.setText(self.last_receipt)
+            self.store.event(self.sid,"alert",self.last_receipt)
+            self.shriek(); self.show_overlay()
+            self.notice.setText("New alert receipt on Today. Use False alarm if this was expected work.")
         if self.engine.active-self.last_sample >= 1:
-            self.last_sample = self.engine.active; self.samples.append(decision.confidence)
+            self.last_sample = self.engine.active; self.samples.append(decision.confidence if decision.state not in ("unknown","absent") else None)
             self.chart.values = list(self.samples); self.chart.update()
             self.store.sample(self.sid,self.engine.active,decision.confidence,decision.state)
             self.store.checkpoint(self.sid,self.engine.summary())
@@ -604,7 +729,7 @@ class MainWindow(WorkspaceMixin,QMainWindow):
             self.signal_badges.setText(f"Face {'visible' if self.observation.face else 'absent'}     Phone {'visible' if self.observation.phone else 'not detected / off'}     {'Demo' if self.demo else 'Camera live'}")
             remaining = max(0,self.settings.break_minutes*60-self.engine.since_break)
             self.break_label.setText(f'Next stretch · {duration(remaining)}')
-            self.break_progress.setValue(round(self.engine.since_break/(self.settings.break_minutes*60)*100))
+            self.break_progress.setValue(min(100,round(self.engine.since_break/(self.settings.break_minutes*60)*100)))
         if self.engine.break_due():
             self.store.event(self.sid,"reminder","Elapsed monitoring break reminder")
             self.take_break()
