@@ -26,13 +26,16 @@ def test_phone_without_looking_away_never_triggers():
     assert e.alerts == 0 and e.phone_events == 1
 
 
-def test_phone_downward_accelerates_and_cooldown_works():
+def test_aligned_phone_uses_exact_elapsed_threshold_and_cooldown():
     e = engine()
-    run(e,Observation(True,pitch=.4,phone=True),6)
+    obs = Observation(True,pitch=.4,phone=True,phone_aligned=True)
+    assert run(e,obs,7.9).state == 'warning'
+    decision = e.step(obs,.1)
+    assert decision.alert and 'Phone' in decision.reason
     assert e.alerts == 1 and e.distractions == 1
-    run(e,Observation(True,pitch=.4,phone=True),10)
+    run(e,obs,19)
     assert e.alerts == 1
-    run(e,Observation(True,pitch=.4,phone=True),12)
+    run(e,obs,2)
     assert e.alerts == 2 and e.distractions == 1
 
 
@@ -60,7 +63,8 @@ def test_break_timer_and_accounting():
 def test_paper_mode_still_reacts_to_phone():
     e = engine(paper_mode=True)
     assert run(e,Observation(True,pitch=.4),10).state == 'focused'
-    assert run(e,Observation(True,pitch=.4,phone=True),10).state == 'angry'
+    assert run(e,Observation(True,pitch=.4,phone=True),10).state == 'focused'
+    assert run(e,Observation(True,pitch=.4,phone=True,phone_aligned=True),10).state == 'angry'
 
 
 def test_stalled_dt_is_bounded():

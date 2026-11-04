@@ -30,6 +30,7 @@ class Settings:
     phone_model: str = ""
     phone_confidence: float = 0.25
     phone_enabled: bool = True
+    handheld_context: bool = True
     phone_backend: str = 'Balanced YOLOX'
     phone_size: int = 416
     auto_light: bool = True
@@ -60,8 +61,8 @@ class Settings:
     def validated(self):
         s = Settings(**asdict(self))
         s.fps = max(5, min(20, int(s.fps)))
-        s.warning_seconds = max(1.0, float(s.warning_seconds))
-        s.alert_seconds = max(s.warning_seconds + 1, float(s.alert_seconds))
+        s.alert_seconds = max(2.0, min(300.0, float(s.alert_seconds)))
+        s.warning_seconds = max(1.0, min(s.alert_seconds - 1.0, float(s.warning_seconds)))
         s.break_minutes = max(1, int(s.break_minutes))
         s.cooldown_seconds = max(1.0, float(s.cooldown_seconds))
         s.head_tolerance = max(.03, float(s.head_tolerance))
@@ -94,6 +95,14 @@ class Observation:
     light_level: float = 0.
     light_gain: float = 1.
     phone_status: str = 'off'
+    phone_stamp: float = 0.
+    phone_check_result: bool = False
+    object_label: str = ''
+    object_score: float = 0.
+    object_held: bool = False
+    phone_aligned: bool = False
+    frame_size: tuple = (0, 0)
+    backlight: float = 0.
 
 
 @dataclass
@@ -102,6 +111,7 @@ class Decision:
     confidence: float
     reason: str
     alert: bool = False
+    evidence: str = ''
 
 
 class AttentionEngine:
@@ -120,7 +130,7 @@ class AttentionEngine:
         self._phone = False
         self._episode = False
 
-    def step(self, o: Observation, dt: float) -> Decision:
+    def step(self, o: Observation, dt: float, reactions=True) -> Decision:
         # A stalled camera is unobserved time, never a multi-second focus credit.
         dt = max(0.0, min(float(dt), .5))
         self.active += dt
@@ -145,41 +155,48 @@ class AttentionEngine:
         gaze = max(abs(o.gaze_x-gx), abs(o.gaze_y-gy)) / s.gaze_tolerance
         if not o.eyes_open:
             gaze = 0.0
-        downward = o.pitch-bp > s.head_tolerance * .65 or o.gaze_y-gy > s.gaze_tolerance
+        downward = o.pitch-bp > s.head_tolerance * .65 or (o.eyes_open and o.gaze_y-gy > s.gaze_tolerance)
         away = head > 1 or (gaze > 1 and o.eyes_open)
-        if s.paper_mode and downward and not o.phone:
+        phone_context = downward and o.phone and o.phone_aligned
+        held_context = s.handheld_context and o.object_held and bool(o.object_label)
+        evidence = ("Possible handheld phone" if o.object_held and o.object_label == "phone" else
+                    "Phone in likely look direction") if phone_context else (
+                        f"Possible handheld {o.object_label}" if held_context else "")
+        away = away or phone_context
+        if s.paper_mode and downward and not evidence:
             away = False
         confidence = max(0., min(1., 1 - .42*head - .23*gaze))
         if away:
-            self.away += dt * (1.6 if o.phone and downward else 1)
+            self.away += dt
             self.stable = self.streak = 0
-            if self.away >= s.warning_seconds:
+            if self.away + 1e-8 >= s.warning_seconds:
                 if not self._episode:
                     self.distractions += 1
                     self._episode = True
                 self.distracted += dt
             else:
                 self.unknown += dt  # grace period is not measured focus
-            state = "angry" if self.away >= s.alert_seconds else "warning" if self.away >= s.warning_seconds else "watching"
-            reason = "Looking down + phone visible" if downward and o.phone else "Head / gaze outside calibrated range"
+            state = "angry" if self.away + 1e-8 >= s.alert_seconds else "warning" if self.away + 1e-8 >= s.warning_seconds else "watching"
+            reason = evidence or ("Sustained downward look" if downward else "Head or gaze outside calibrated range")
         else:
+            recovering = self.away > 0 or self.state == "calming"
+            self.away = 0.
             self.stable += dt
             self.focus += dt
             self.streak += dt
             self.longest = max(self.longest, self.streak)
             if self.stable >= s.recovery_seconds:
-                self.away = 0
                 self._episode = False
                 state = "focused"
             else:
-                state = "calming" if self.away else "focused"
+                state = "calming" if recovering else "focused"
             reason = "Within calibrated screen range"
-        alert = state == "angry" and self.active-self.last_alert >= s.cooldown_seconds and self.active>=self.quiet_until
+        alert = reactions and state == "angry" and self.active-self.last_alert >= s.cooldown_seconds and self.active>=self.quiet_until
         if alert:
             self.alerts += 1
             self.last_alert = self.active
         self.state = state
-        return Decision(state, confidence, reason, alert)
+        return Decision(state, confidence, reason, alert, evidence)
 
     def break_due(self):
         return self.since_break >= self.settings.break_minutes * 60

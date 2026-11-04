@@ -28,6 +28,7 @@ def test_face_weighted_light_handles_dark_face_bright_background_without_mutatin
     assert .55<=lighting.gamma<1 and corrected[150,320].mean()>frame[150,320].mean()
     assert corrected.max()<=255
     assert np.array_equal(lighting.correct(frame,enabled=False),frame)
+    assert lighting.level == 35 and lighting.gamma == 1.
 
 
 def test_false_alarm_quiet_period_does_not_fabricate_focus():

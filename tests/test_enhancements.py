@@ -44,17 +44,22 @@ def test_character_state_blend_and_eased_return():
 def test_slow_phone_inference_does_not_block_frame_submission():
     entered,release = threading.Event(),threading.Event()
     class Detector:
-        def predict_phone(self,frame): entered.set(); release.wait(2); return True
+        def detect(self,frame):
+            entered.set(); release.wait(2)
+            return {"visible":True,"boxes":[],"score":.8}
     class Status:
         def emit(self,text): pass
     worker = PhoneWorker(Detector(),.5,Status())
     try:
-        worker.submit('first'); worker.start()
+        import numpy as np
+        first, second, latest = (np.zeros((2,2,3)) for _ in range(3))
+        context = ((.5,.5),(0.,0.),False)
+        worker.submit(first,*context); worker.start()
         assert entered.wait(1)
-        worker.submit('second'); worker.submit('latest')
-        with worker.lock: assert worker.frame == 'latest'
-        worker.result = (True,time.monotonic()-5)
-        assert not worker.visible()
+        worker.submit(second,*context); worker.submit(latest,*context)
+        with worker.lock: assert worker.frame[0] is latest
+        worker.result = time.monotonic()-5
+        assert not worker.detection()['visible']
     finally:
         release.set(); worker.stop(); worker.join(2)
     assert not worker.is_alive()

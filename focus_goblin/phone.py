@@ -1,6 +1,29 @@
 """OpenCV Darknet class scores already include objectness; never multiply twice."""
 import sys
+from math import hypot
 from pathlib import Path
+
+
+# A limited set of handheld COCO categories. "Held" is a proximity estimate.
+HANDHELD = {39: 'bottle', 41: 'cup', 65: 'remote', 73: 'book'}
+
+
+def aligned_with_look(box, origin, direction, frame_size):
+    """Broad image-space look cone. Coordinates match the unmirrored camera."""
+    x, y, w, h = box
+    fw, fh = frame_size
+    dx, dy = (x+w/2)/fw-origin[0], (y+h/2)/fh-origin[1]
+    vx, vy = direction
+    distance = hypot(dx, dy)
+    speed = hypot(vx, vy)
+    return distance > .06 and speed > .1 and (dx*vx+dy*vy)/(distance*speed) >= .65
+
+
+def near_hand(box, hands, frame_size):
+    x, y, w, h = box
+    fw, fh = frame_size
+    pad = max(10, min(45, max(w, h)*.22))
+    return any(x-pad <= px*fw <= x+w+pad and y-pad <= py*fh <= y+h+pad for px,py in hands)
 
 
 def find_phone_model(selected='',prefer_eco=False):
@@ -70,7 +93,7 @@ class YoloXPhoneDetector:
             grids.append(np.stack((x,y),axis=-1).reshape(-1,2));strides.append(np.full((x.size,1),stride))
         self.grid=np.concatenate(grids);self.strides=np.concatenate(strides)
 
-    def detect(self,frame):
+    def detect(self,frame, include_objects=False):
         import cv2
         import numpy as np
         h,w=frame.shape[:2];scale=640/max(h,w)
@@ -82,15 +105,28 @@ class YoloXPhoneDetector:
         centers=(output[:,:2]+self.grid)*self.strides
         sizes=np.exp(np.clip(output[:,2:4],-20,20))*self.strides
         scores=output[:,4:5]*output[:,5:]
-        mask=np.argmax(scores,axis=1)==67;phone_scores=scores[:,67]
+        labels=np.argmax(scores,axis=1)
+        mask=labels==67;phone_scores=scores[:,67]
         peak=float(np.max(phone_scores[mask])) if np.any(mask) else 0.
         indices=np.flatnonzero(mask & (phone_scores>=self.confidence))
-        boxes=[];conf=[]
-        for i in indices:
+        def box_at(i):
             x1,y1=(centers[i]-sizes[i]/2)/scale;x2,y2=(centers[i]+sizes[i]/2)/scale
             x1,y1=max(0,int(x1)),max(0,int(y1));x2,y2=min(w,int(x2)),min(h,int(y2))
-            if x2>x1 and y2>y1:boxes.append([x1,y1,x2-x1,y2-y1]);conf.append(float(phone_scores[i]))
+            return [x1,y1,x2-x1,y2-y1] if x2>x1 and y2>y1 else None
+
+        boxes=[];conf=[]
+        for i in indices:
+            box=box_at(i)
+            if box: boxes.append(box);conf.append(float(phone_scores[i]))
         keep=cv2.dnn.NMSBoxes(boxes,conf,self.confidence,.45) if boxes else []
-        return {'score':peak,'boxes':[(boxes[int(i)],conf[int(i)]) for i in np.array(keep).flatten()],'visible':len(keep)>0}
+        objects = []
+        if include_objects:
+            for label, name in HANDHELD.items():
+                candidates = np.flatnonzero((labels == label) & (scores[:,label] >= .45))
+                for i in sorted(candidates, key=lambda i: scores[i,label], reverse=True)[:3]:
+                    box = box_at(i)
+                    if box: objects.append((box,float(scores[i,label]),name))
+        return {'score':peak,'boxes':[(boxes[int(i)],conf[int(i)]) for i in np.array(keep).flatten()],
+                'visible':len(keep)>0,'objects':objects}
 
     def predict_phone(self,frame):return self.detect(frame)['visible']
