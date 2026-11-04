@@ -3,7 +3,7 @@ requires = ["setuptools>=65"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "focus-goblin-local"
+name = "focus-goblu-local"
 version = "0.4.0"
 description = "Private local webcam attention estimates with an animated desktop goblin"
 requires-python = ">=3.11,<3.12"
@@ -13,6 +13,7 @@ dynamic = ["dependencies"]
 dependencies = {file = ["requirements.txt"]}
 
 [project.gui-scripts]
+focus-goblu = "focus_goblin.__main__:main"
 focus-goblin = "focus_goblin.__main__:main"
 
 [tool.setuptools.packages.find]

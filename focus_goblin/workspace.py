@@ -29,7 +29,7 @@ class WorkspaceMixin:
         self.setup_history_analytics()
         self.tray=None
         if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray=QSystemTrayIcon(self.windowIcon(),self);self.tray.setToolTip('Focus Goblin · camera status in dashboard')
+            self.tray=QSystemTrayIcon(self.windowIcon(),self);self.tray.setToolTip('Focus Goblu · camera status in dashboard')
             menu=QMenu(self)
             for label,callback in [('Open dashboard',lambda:self.pet_action('dashboard')),('Pause / resume',self.pause),('Stop monitoring',self.stop),('Quit',self.close)]:
                 action=menu.addAction(label);action.triggered.connect(callback)
@@ -340,11 +340,11 @@ class WorkspaceMixin:
             a,b = current[key]/div,previous[key]/div
             rows.append(f'<tr><th>{html.escape(label)}</th><td>{a:g}</td><td>{b:g}</td><td>{a-b:+g}</td></tr>')
         daily = ''.join(f'<li>{day}: {seconds/60:.1f} min</li>' for day,seconds in self.store.daily_range(days))
-        report = ('<!doctype html><html lang="en"><meta charset="utf-8"><title>Focus Goblin report</title>'
+        report = ('<!doctype html><html lang="en"><meta charset="utf-8"><title>Focus Goblu report</title>'
                   '<style>body{background:#101a26;color:#eaf2f5;font:16px system-ui;max-width:760px;margin:3rem auto;padding:0 1rem}'
                   'table{width:100%;border-collapse:collapse}th,td{padding:.7rem;text-align:left;border-bottom:1px solid #385064}'
                   'h1,h2{color:#86dfc9}li{margin:.25rem 0}</style>'
-                  f'<h1>Focus Goblin | {days}-day comparison</h1>'
+                  f'<h1>Focus Goblu | {days}-day comparison</h1>'
                   f"<p>{current['range']} compared with {previous['range']}.</p>"
                   '<p>Local session estimates grouped by start date. Demo sessions excluded. The current period includes today.</p>'
                   '<table><thead><tr><th>Measure</th><th>Current</th><th>Previous</th><th>Change</th></tr></thead>'
@@ -387,7 +387,7 @@ class WorkspaceMixin:
         self.store.backup(data_dir()/f'before-delete-{time.time_ns()}.sqlite3');self.store.delete_sessions(ids);self.refresh_history()
 
     def install_update(self):
-        source,_=QFileDialog.getOpenFileName(self,'Choose a trusted downloaded Focus Goblin installer','','Installer (*.exe)')
+        source,_=QFileDialog.getOpenFileName(self,'Choose a trusted downloaded Focus Goblu installer','','Installer (*.exe)')
         if not source:return
         if QMessageBox.question(self,'Run update installer?',f'Run this installer?\n{source}\nYour session will stop and the app will close. Only use installers you trust.')!=QMessageBox.StandardButton.Yes:return
         import subprocess

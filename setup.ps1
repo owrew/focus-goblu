@@ -6,4 +6,4 @@ if (-not (Test-Path -LiteralPath '.venv\Scripts\python.exe')) {
 }
 & '.\.venv\Scripts\python.exe' -m pip install -r requirements.txt
 if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
-Write-Host 'Ready. Double-click Launch Focus Goblin.cmd. Choose Start camera, then Calibrate.'
+Write-Host 'Ready. Double-click Launch Focus Goblu.cmd. Choose Start camera, then Calibrate.'

@@ -7,16 +7,16 @@ from .storage import data_dir
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Focus Goblin desktop app")
+    parser = argparse.ArgumentParser(description="Focus Goblu desktop app")
     parser.add_argument("--demo",action="store_true",help="Start simulated signals without accessing the camera")
     parser.add_argument('--pet-only',action='store_true',help='Show the companion with the camera off; hide dashboard')
     parser.add_argument("--self-test",metavar="REPORT",help="Verify packaged UI and MediaPipe without opening the camera; write JSON report")
     args = parser.parse_args()
     app = QApplication(sys.argv)
-    app.setApplicationName("Focus Goblin")
+    app.setApplicationName("Focus Goblu")
     lock = QLockFile(str(data_dir()/'application.lock'))
     if not lock.tryLock(0):
-        QMessageBox.information(None,'Focus Goblin is already open','Open the existing dashboard or right-click your desktop goblin. Close it before starting another copy.')
+        QMessageBox.information(None,'Focus Goblu is already open','Open the existing dashboard or right-click your desktop goblin. Close it before starting another copy.')
         return 0
     window = MainWindow(); window.show()
     if args.pet_only and window.overlay.isVisible() and window.tray:window.hide()

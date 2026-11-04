@@ -5,4 +5,4 @@ if not exist ".venv\Scripts\pythonw.exe" (
   pause
   exit /b 1
 )
-start "Focus Goblin" ".venv\Scripts\pythonw.exe" -m focus_goblin
+start "Focus Goblu" ".venv\Scripts\pythonw.exe" -m focus_goblin

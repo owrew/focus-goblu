@@ -54,7 +54,7 @@ class Mascot(QWidget):
         if overlay:
             self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.Tool | Qt.WindowType.WindowDoesNotAcceptFocus)
             self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-            self.setToolTip("Focus Goblin desktop pet · drag to move · right-click for controls · double-click to greet")
+            self.setToolTip("Focus Goblu desktop pet · drag to move · right-click for controls · double-click to greet")
             rect = QApplication.primaryScreen().availableGeometry()
             self.move(rect.right()-self.width()-20, rect.bottom()-self.height()-20)
         self.timer = QTimer(self)

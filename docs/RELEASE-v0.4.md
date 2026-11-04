@@ -1,4 +1,4 @@
-# Focus Goblin 0.4.0
+# Focus Goblu 0.4.0
 
 - Today puts the live chart and pet above the camera and alert detail. Live chart gaps represent unavailable tracking. The waterfall and frosted panels remain.
 - Phone Check 2.0 measures six seconds per view for the screen, case and edge. It alternates full and cropped inputs, ignores duplicate detector packets and requires an explicit Apply. Diagnostic sampling pauses session accounting.

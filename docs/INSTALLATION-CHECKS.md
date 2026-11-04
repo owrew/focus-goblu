@@ -9,4 +9,4 @@
 
 This verifies the install/update/uninstall cycle on the current Windows computer. It is not a clean-VM test, an older-Windows compatibility certification, or proof of antivirus/SmartScreen reputation. Source startup registration was implemented as an opt-in per-user Run entry; actual sign-out/sign-in startup was not performed. The native global shortcut's registration and message dispatch were verified separately.
 
-Use FocusGoblin-Setup-0.3.0.exe for a normal per-user installation and Start menu shortcut. Later installers using the same application ID upgrade the same path and preserve the LocalAppData/FocusGoblin data folder. The Settings update picker requires an installer you have already downloaded and explicitly confirm; there is no hosted automatic updater.
+Use FocusGoblu-Setup-0.4.0.exe for a normal per-user installation and Start menu shortcut. Later installers using the same application ID upgrade the same path and preserve the LocalAppData/FocusGoblin data folder. The Settings update picker requires an installer you have already downloaded and explicitly confirm; there is no hosted automatic updater.

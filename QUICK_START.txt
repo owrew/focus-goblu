@@ -1,11 +1,11 @@
-FOCUS GOBLIN 0.4 — LOCAL WINDOWS APPLICATION
+FOCUS GOBLU 0.4 — LOCAL WINDOWS APPLICATION
 
 Source project on this computer:
 C:\Users\awais\OneDrive\Downloads\Computer vision program\focus-goblin
 
-Installed-source launch: double-click Launch Focus Goblin.cmd.
-Portable build: open FocusGoblin-v0.4.exe in the Windows folder build.
-Installer: FocusGoblin-Setup-0.4.0.exe (per-user installation; no admin required).
+Installed-source launch: double-click Launch Focus Goblu.cmd.
+Portable build: open FocusGoblu-v0.4.exe in the Windows folder build.
+Installer: FocusGoblu-Setup-0.4.0.exe (per-user installation; no admin required).
 
 The transparent desktop goblin pet appears with the camera OFF.
 Drag to move; right-click for controls. It remains visible when the dashboard is minimized.
