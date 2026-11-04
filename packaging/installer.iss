@@ -1,4 +1,4 @@
-#define AppVersion "0.3.0"
+#define AppVersion "0.4.0"
 #define ProductName "Focus Goblin"
 
 [Setup]
@@ -28,8 +28,8 @@ Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
 Name: startup; Description: "Start the desktop pet at sign-in (camera stays off)"; Flags: unchecked
 
 [Files]
-Source: "..\dist\FocusGoblin-v0.3\FocusGoblin-v0.3.exe"; DestDir: "{app}"; DestName: "FocusGoblin.exe"; Flags: ignoreversion
-Source: "..\dist\FocusGoblin-v0.3\*"; DestDir: "{app}"; Excludes: "FocusGoblin-v0.3.exe"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\dist\FocusGoblin-v0.4\FocusGoblin-v0.4.exe"; DestDir: "{app}"; DestName: "FocusGoblin.exe"; Flags: ignoreversion
+Source: "..\dist\FocusGoblin-v0.4\*"; DestDir: "{app}"; Excludes: "FocusGoblin-v0.4.exe"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\Focus Goblin"; Filename: "{app}\FocusGoblin.exe"
